@@ -51,7 +51,7 @@ const menu = ref(false)
 
 async function submitService() {
   try {
-    const response = await fetch("https://localhost:7012/api/service", {
+    const response = await fetch("https://todowebapi-nc9p.onrender.com/api/service", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(service.value),

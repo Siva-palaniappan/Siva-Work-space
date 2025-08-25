@@ -26,7 +26,7 @@ const services = ref([])
 
 async function fetchServices() {
   try {
-    const res = await fetch("https://localhost:7012/api/service")
+    const res = await fetch("https://todowebapi-nc9p.onrender.com/api/service")
     services.value = await res.json()
   } catch (err) {
     console.error("Error fetching services:", err)
