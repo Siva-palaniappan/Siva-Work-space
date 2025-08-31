@@ -21,12 +21,16 @@
 <script setup>
 import { ref, onMounted } from "vue"
 import AddService from "@/components/AddService.vue"
-
+const config = useRuntimeConfig()
 const services = ref([])
 
 async function fetchServices() {
   try {
-    const res = await fetch("https://todowebapi-nc9p.onrender.com/api/service")
+    //const res = await fetch("https://todowebapi-nc9p.onrender.com/api/service")
+    //const res = await fetch("http://localhost:5000/api/service") //local setup
+    const res = await fetch(`${config.public.apiBase}/service`) 
+
+    
     services.value = await res.json()
   } catch (err) {
     console.error("Error fetching services:", err)

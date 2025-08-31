@@ -8,9 +8,20 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   modules: ['@nuxtjs/tailwindcss'],
-  css: ['vuetify/styles'],
+  css: ['vuetify/styles','@/assets/css/tailwind.css'],
   build: {
     transpile: ['vuetify']
+  },
+  postcss: {
+    plugins: {
+      tailwindcss: {},
+      autoprefixer: {},
+    },
+  },
+   runtimeConfig: {
+    public: {
+      apiBase: process.env.API_BASE_URL || 'http://localhost:5000/api/service'
+    }
   },
    components: true
 })
