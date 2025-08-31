@@ -62,11 +62,28 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import axios from 'axios'
+import { useRouter } from 'vue-router'
 
 const email = ref('')
 const password = ref('')
+const router = useRouter()
 
-const onLogin = () => {
-  console.log('Login clicked:', { email: email.value, password: password.value })
+const onLogin = async () => {
+  try {
+    const response = await axios.post('http://localhost:5000/api/auth/login', {
+      email: email.value,
+      password: password.value
+    })
+
+    const token = response.data.token
+    localStorage.setItem('jwt', token)
+
+    alert('Login successful!')
+    router.push('/gallery') // Redirect after login
+  } catch (err) {
+    alert('Invalid email or password')
+  }
 }
+
 </script>
