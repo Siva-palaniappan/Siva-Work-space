@@ -10,20 +10,21 @@
         Create Your Account
       </v-card-title>
 
-      <!-- Name -->
-      <v-text-field
-        v-model="name"
-        label="Full Name"
-        variant="outlined"
-        class="mb-4"
-        clearable
-      />
-
       <!-- Email -->
       <v-text-field
         v-model="email"
         label="Email Address"
         type="email"
+        variant="outlined"
+        class="mb-4"
+        clearable
+      />
+
+      <!-- Phone -->
+      <v-text-field
+        v-model="phone"
+        label="Phone Number"
+        type="tel"
         variant="outlined"
         class="mb-4"
         clearable
@@ -72,17 +73,28 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useAuth } from '~/composables/useAuth'
 
-const name = ref('')
 const email = ref('')
+const phone = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 
-const onSignup = () => {
+const { register } = useAuth()
+
+const onSignup = async () => {
   if (password.value !== confirmPassword.value) {
     alert('Passwords do not match!')
     return
   }
-  console.log('Signup clicked:', { name: name.value, email: email.value, password: password.value })
+
+  const { data, error } = await register(email.value, password.value, phone.value)
+
+  if (error.value) {
+    alert('Registration failed: ' + error.value.statusMessage)
+  } else {
+    alert('Registered successfully!')
+    console.log('Backend response:', data.value)
+  }
 }
 </script>

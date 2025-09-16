@@ -19,9 +19,25 @@
           />
 
           <!-- Reset Button -->
-          <v-btn block color="primary" class="mb-4" @click="onReset">
+          <v-btn
+            block
+            color="primary"
+            class="mb-4"
+            :loading="loading"
+            @click="sendResetLink"
+          >
             Send Reset Link
           </v-btn>
+
+          <!-- Success message -->
+          <div v-if="message" class="text-green text-center mb-2">
+            {{ message }}
+          </div>
+
+          <!-- Error message -->
+          <div v-if="error" class="text-red text-center mb-2">
+            {{ error }}
+          </div>
 
           <!-- Back to login -->
           <div class="text-center">
@@ -37,10 +53,27 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useAuth } from '~/composables/useAuth'
 
 const email = ref('')
+const message = ref('')
+const error = ref('')
+const loading = ref(false)
 
-const onReset = () => {
-  console.log('Reset link sent to:', email.value)
+const { submitEmail } = useAuth()
+
+const sendResetLink = async () => {
+  message.value = ''
+  error.value = ''
+  loading.value = true
+
+  try {
+    const res = await submitEmail(email.value)
+    message.value = res?.message || 'If the email exists, a reset link has been sent.'
+  } catch (err: any) {
+    error.value = err.message || 'Something went wrong. Please try again.'
+  } finally {
+    loading.value = false
+  }
 }
 </script>
