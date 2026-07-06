@@ -20,7 +20,7 @@ export default defineNuxtConfig({
   },
    runtimeConfig: {
     public: {
-      apiBase: process.env.API_BASE_URL || 'http://localhost:5000/api/service'
+      apiBase: process.env.API_BASE_URL || 'http://localhost:5000/api'
     }
   },
    components: true

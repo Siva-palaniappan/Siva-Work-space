@@ -28,6 +28,11 @@
             clearable
           />
 
+          <!-- Error -->
+          <v-alert v-if="errorMessage" type="error" density="compact" class="mb-4" variant="tonal">
+            {{ errorMessage }}
+          </v-alert>
+
           <!-- Forgot Password -->
           <div class="text-right mb-4">
             <NuxtLink to="/forgot-password" class="text-blue">
@@ -62,28 +67,56 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import axios from 'axios'
 import { useRouter } from 'vue-router'
+
+definePageMeta({ layout: 'auth' })
+
+// --- old login feature (external JWT backend) ---
+// import axios from 'axios'
+//
+// const onLogin = async () => {
+//   try {
+//     const response = await axios.post('http://localhost:5000/api/auth/login', {
+//       email: email.value,
+//       password: password.value
+//     })
+//
+//     const token = response.data.token
+//     localStorage.setItem('jwt', token)
+//
+//     alert('Login successful!')
+//     router.push('/gallery') // Redirect after login
+//   } catch (err) {
+//     alert('Invalid email or password')
+//   }
+// }
+// --- end old login feature ---
 
 const email = ref('')
 const password = ref('')
 const router = useRouter()
+const errorMessage = ref('')
 
 const onLogin = async () => {
+  errorMessage.value = ''
+
+  if (!email.value || !password.value) {
+    errorMessage.value = 'Please enter your email and password.'
+    return
+  }
+
   try {
-    const response = await axios.post('http://localhost:5000/api/auth/login', {
-      email: email.value,
-      password: password.value
+    const user = await $fetch('/auth/login', {
+      method: 'POST',
+      body: { email: email.value, password: password.value },
     })
 
-    const token = response.data.token
-    localStorage.setItem('jwt', token)
+    localStorage.setItem('spendnest_userid', user.userid)
+    localStorage.setItem('spendnest_username', user.name)
 
-    alert('Login successful!')
-    router.push('/gallery') // Redirect after login
-  } catch (err) {
-    alert('Invalid email or password')
+    router.push('/')
+  } catch (err: any) {
+    errorMessage.value = err?.data?.statusMessage || 'Invalid email or password'
   }
 }
-
 </script>
