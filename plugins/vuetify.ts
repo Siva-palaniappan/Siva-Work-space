@@ -20,6 +20,25 @@ export default defineNuxtPlugin(nuxtApp => {
         mdi,
       },
     },
+    theme: {
+      defaultTheme: 'spendnest',
+      themes: {
+        spendnest: {
+          dark: false,
+          colors: {
+            primary: '#2F6B3D',
+            'primary-darken-1': '#245530',
+            secondary: '#4C9457',
+            background: '#F5F1E8',
+            surface: '#FFFFFF',
+            error: '#B00020',
+            info: '#2196F3',
+            success: '#2F6B3D',
+            warning: '#FB8C00',
+          },
+        },
+      },
+    },
   })
 
   nuxtApp.vueApp.use(vuetify)

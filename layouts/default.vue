@@ -4,6 +4,7 @@
       <v-tab value="expense" @click="router.push('/expense')">Expense</v-tab>
       <v-tab value="category" @click="router.push('/category')">Category</v-tab>
     </v-tabs>
+    <v-btn icon="mdi-logout" variant="text" @click="onSignOut" title="Sign out" />
   </v-app-bar>
 
   <v-main>
@@ -34,4 +35,11 @@ watch(() => route.path, () => {
   showNav.value = !!localStorage.getItem('spendnest_userid')
   syncTabFromRoute()
 })
+
+const onSignOut = () => {
+  localStorage.removeItem('spendnest_userid')
+  localStorage.removeItem('spendnest_username')
+  showNav.value = false
+  router.push('/')
+}
 </script>

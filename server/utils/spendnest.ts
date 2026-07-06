@@ -59,6 +59,16 @@ export async function createUser(data: { name: string; phone: string; email: str
   return rows[0]
 }
 
+export async function resetPassword(email: string, newPassword: string): Promise<void> {
+  const { rowCount } = await getPool().query(
+    'update users set password = $1 where lower(email) = lower($2)',
+    [hashPassword(newPassword), email],
+  )
+  if (rowCount === 0) {
+    throw new Error('USER_NOT_FOUND')
+  }
+}
+
 export async function getCategories(userid: string): Promise<CategoryRow[]> {
   const { rows } = await getPool().query(
     `select catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid
@@ -127,7 +137,7 @@ export async function updateExpense(
      where expenseid = $4 and userid = $5
      returning expenseid, category, amount, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense`,
     [category, amount, dateofexpense, expenseid, userid],
-  )
+  ) 
   if (!rows[0]) {
     throw new Error('EXPENSE_NOT_FOUND')
   }
