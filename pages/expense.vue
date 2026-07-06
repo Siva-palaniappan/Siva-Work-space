@@ -259,7 +259,6 @@ const onSubmitExpense = async () => {
         body: {
           userid,
           expenseid: editingEntry.value.expenseid,
-          originalCategory: editingEntry.value.category,
           category,
           amount: value,
           dateofexpense: expenseDate.value,
@@ -285,7 +284,7 @@ const onDeleteExpense = async (entry: ExpenseEntry) => {
   try {
     await $fetch('/expenses', {
       method: 'DELETE',
-      query: { userid, expenseid: entry.expenseid, category: entry.category },
+      query: { userid, expenseid: entry.expenseid },
     })
     await loadExpenses()
   } catch (err: any) {
