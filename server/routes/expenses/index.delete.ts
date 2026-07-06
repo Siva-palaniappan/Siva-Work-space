@@ -4,14 +4,13 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const userid = String(query.userid ?? '')
   const expenseid = String(query.expenseid ?? '')
-  const category = String(query.category ?? '')
 
-  if (!userid || !expenseid || !category) {
-    throw createError({ statusCode: 400, statusMessage: 'userid, expenseid and category are required' })
+  if (!userid || !expenseid) {
+    throw createError({ statusCode: 400, statusMessage: 'userid and expenseid are required' })
   }
 
   try {
-    await deleteExpense(userid, expenseid, category)
+    await deleteExpense(userid, expenseid)
     return { success: true }
   } catch (err: any) {
     if (err.message === 'EXPENSE_NOT_FOUND') {

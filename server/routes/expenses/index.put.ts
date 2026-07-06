@@ -6,13 +6,12 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const userid = String(body?.userid ?? '').trim()
   const expenseid = String(body?.expenseid ?? '').trim()
-  const originalCategory = String(body?.originalCategory ?? '').trim()
   const category = String(body?.category ?? '').trim()
   const amount = Number(body?.amount)
   const dateofexpense = String(body?.dateofexpense ?? '').trim()
 
-  if (!userid || !expenseid || !originalCategory || !category) {
-    throw createError({ statusCode: 400, statusMessage: 'userid, expenseid, originalCategory and category are required' })
+  if (!userid || !expenseid || !category) {
+    throw createError({ statusCode: 400, statusMessage: 'userid, expenseid and category are required' })
   }
   if (!Number.isFinite(amount) || amount <= 0) {
     throw createError({ statusCode: 400, statusMessage: 'amount must be a positive number' })
@@ -22,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await updateExpense(userid, expenseid, originalCategory, category, amount, dateofexpense)
+    return await updateExpense(userid, expenseid, category, amount, dateofexpense)
   } catch (err: any) {
     if (err.message === 'EXPENSE_NOT_FOUND') {
       throw createError({ statusCode: 404, statusMessage: 'Expense not found' })
