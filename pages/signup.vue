@@ -43,7 +43,9 @@
       <v-text-field
         v-model="password"
         label="Password"
-        type="password"
+        :type="showPassword ? 'text' : 'password'"
+        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showPassword = !showPassword"
         variant="outlined"
         class="mb-1"
         clearable
@@ -65,7 +67,9 @@
       <v-text-field
         v-model="confirmPassword"
         label="Confirm Password"
-        type="password"
+        :type="showConfirmPassword ? 'text' : 'password'"
+        :append-inner-icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showConfirmPassword = !showConfirmPassword"
         variant="outlined"
         class="mb-4"
         clearable
@@ -118,6 +122,8 @@ const email = ref('')
 const phone = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 const errorMessage = ref('')
 const router = useRouter()
 
@@ -170,7 +176,7 @@ const onSignup = async () => {
     })
 
     alert('Account created! Please log in.')
-    router.push('/login')
+    router.push('/login') 
   } catch (err: any) {
     errorMessage.value = err?.data?.statusMessage || 'Signup failed'
   }
