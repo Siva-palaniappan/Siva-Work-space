@@ -9,6 +9,7 @@ export default defineEventHandler(async (event) => {
   const category = String(body?.category ?? '').trim()
   const amount = Number(body?.amount)
   const dateofexpense = String(body?.dateofexpense ?? '').trim()
+  const description = String(body?.description ?? '').trim()
 
   if (!userid || !expenseid || !category) {
     throw createError({ statusCode: 400, statusMessage: 'userid, expenseid and category are required' })
@@ -21,7 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await updateExpense(userid, expenseid, category, amount, dateofexpense)
+    return await updateExpense(userid, expenseid, category, amount, dateofexpense, description)
   } catch (err: any) {
     if (err.message === 'EXPENSE_NOT_FOUND') {
       throw createError({ statusCode: 404, statusMessage: 'Expense not found' })
