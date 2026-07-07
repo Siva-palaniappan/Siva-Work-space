@@ -11,13 +11,14 @@
             <v-tab value="add">Add Expense</v-tab>
             <v-tab value="all">View All</v-tab>
             <v-tab value="total">View Total</v-tab>
+            <v-tab value="byDate">View by Date</v-tab>
           </v-tabs>
 
           <v-alert v-if="errorMessage" type="error" density="compact" class="mb-4" variant="tonal">
             {{ errorMessage }}
           </v-alert>
 
-          <div v-if="tab === 'all' || tab === 'total'" class="d-flex align-center mb-4" style="gap: 8px;">
+          <div v-if="tab === 'all' || tab === 'total' || tab === 'byDate'" class="d-flex align-center mb-4" style="gap: 8px;">
             <v-text-field
               v-model="dateFrom"
               label="From"
@@ -69,7 +70,7 @@
                   v-for="item in entries"
                   :key="item.expenseid"
                   :title="`${item.category} — ${item.amount.toFixed(2)}`"
-                  :subtitle="formatDate(item.dateofexpense)"
+                  :subtitle="item.description ? `${formatDate(item.dateofexpense)} — ${item.description}` : formatDate(item.dateofexpense)"
                 >
                   <template #append>
                     <v-btn icon="mdi-pencil" variant="text" size="small" @click="openEditDialog(item)" />
@@ -78,6 +79,14 @@
                 </v-list-item>
               </v-list>
               <p v-else class="text-center text-grey mt-6">No expenses recorded yet.</p>
+
+              <template v-if="entries.length">
+                <v-divider class="mt-2" />
+                <div class="d-flex justify-space-between align-center px-2 py-3">
+                  <span class="font-weight-bold">Total</span>
+                  <span class="font-weight-bold">{{ entriesTotal.toFixed(2) }}</span>
+                </div>
+              </template>
             </v-window-item>
 
             <!-- View Total -->
@@ -94,6 +103,44 @@
                 </v-list-item>
               </v-list>
               <p v-else class="text-center text-grey mt-6">No categories yet.</p>
+
+              <template v-if="totals.length">
+                <v-divider class="mt-2" />
+                <div class="d-flex justify-space-between align-center px-2 py-3">
+                  <span class="font-weight-bold">Total</span>
+                  <span class="font-weight-bold">{{ categoriesTotal.toFixed(2) }}</span>
+                </div>
+              </template>
+            </v-window-item>
+
+            <!-- View by Date -->
+            <v-window-item value="byDate">
+              <div v-if="entriesByDate.length">
+                <div v-for="group in entriesByDate" :key="group.date" class="mb-4">
+                  <div class="text-subtitle-2 font-weight-bold px-2 mb-1">
+                    {{ formatDate(group.date) }}
+                  </div>
+                  <v-list lines="two" density="compact">
+                    <v-list-item
+                      v-for="item in group.entries"
+                      :key="item.expenseid"
+                      :title="`${item.category} — ${item.amount.toFixed(2)}`"
+                      :subtitle="item.description || undefined"
+                    >
+                      <template #append>
+                        <v-btn icon="mdi-pencil" variant="text" size="small" @click="openEditDialog(item)" />
+                        <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="onDeleteExpense(item)" />
+                      </template>
+                    </v-list-item>
+                  </v-list>
+                  <v-divider class="mt-1" />
+                  <div class="d-flex justify-space-between align-center px-2 py-2">
+                    <span class="font-weight-medium text-caption">Total for {{ formatDate(group.date) }}</span>
+                    <span class="font-weight-medium">{{ group.total.toFixed(2) }}</span>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="text-center text-grey mt-6">No expenses recorded yet.</p>
             </v-window-item>
           </v-window>
         </v-card>
@@ -128,8 +175,17 @@
             label="Amount"
             type="number"
             variant="outlined"
+            class="mb-2"
             autofocus
             @keyup.enter="onSubmitExpense"
+          />
+
+          <v-textarea
+            v-model="description"
+            label="Description (optional)"
+            variant="outlined"
+            rows="2"
+            auto-grow
           />
         </v-card-text>
         <v-card-actions>
@@ -143,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 interface Category {
@@ -157,6 +213,7 @@ interface ExpenseEntry {
   expenseid: string
   category: string
   amount: number
+  description: string
   dateofexpense: string
 }
 
@@ -164,6 +221,12 @@ interface ExpenseTotal {
   catid: string
   category: string
   amount: number
+}
+
+interface DateGroup {
+  date: string
+  entries: ExpenseEntry[]
+  total: number
 }
 
 const router = useRouter()
@@ -179,11 +242,28 @@ const editingEntry = ref<ExpenseEntry | null>(null)
 const selectedCategoryName = ref('')
 const amount = ref('')
 const expenseDate = ref('')
+const description = ref('')
 
 const dateFrom = ref('')
 const dateTo = ref('')
 
 let userid = ''
+
+const entriesTotal = computed(() => entries.value.reduce((sum, e) => sum + e.amount, 0))
+const categoriesTotal = computed(() => totals.value.reduce((sum, t) => sum + t.amount, 0))
+
+const entriesByDate = computed<DateGroup[]>(() => {
+  const groups = new Map<string, ExpenseEntry[]>()
+  for (const entry of entries.value) {
+    if (!groups.has(entry.dateofexpense)) groups.set(entry.dateofexpense, [])
+    groups.get(entry.dateofexpense)!.push(entry)
+  }
+  return Array.from(groups.entries()).map(([date, list]) => ({
+    date,
+    entries: list,
+    total: list.reduce((sum, e) => sum + e.amount, 0),
+  }))
+})
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
@@ -224,6 +304,7 @@ const openAddDialog = (cat: Category) => {
   selectedCategoryName.value = cat.category
   amount.value = ''
   expenseDate.value = todayStr()
+  description.value = ''
   errorMessage.value = ''
   dialogOpen.value = true
 }
@@ -234,6 +315,7 @@ const openEditDialog = (entry: ExpenseEntry) => {
   selectedCategoryName.value = entry.category
   amount.value = String(entry.amount)
   expenseDate.value = entry.dateofexpense
+  description.value = entry.description
   errorMessage.value = ''
   dialogOpen.value = true
 }
@@ -262,12 +344,13 @@ const onSubmitExpense = async () => {
           category,
           amount: value,
           dateofexpense: expenseDate.value,
+          description: description.value,
         },
       })
     } else {
       await $fetch('/expenses', {
         method: 'POST',
-        body: { userid, category, amount: value, dateofexpense: expenseDate.value },
+        body: { userid, category, amount: value, dateofexpense: expenseDate.value, description: description.value },
       })
     }
     dialogOpen.value = false

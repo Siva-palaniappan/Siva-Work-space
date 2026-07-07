@@ -20,6 +20,7 @@ export interface ExpenseEntry {
   expenseid: string
   category: string
   amount: number
+  description: string
   dateofexpense: string
 }
 
@@ -108,19 +109,25 @@ export async function getExpenses(userid: string, from?: string, to?: string): P
   }
 
   const { rows } = await getPool().query(
-    `select expenseid, category, amount, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense
+    `select expenseid, category, amount, coalesce(description, '') as description, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense
      from expenses where ${conditions.join(' and ')} order by dateofexpense desc`,
     params,
   )
   return rows.map(r => ({ ...r, amount: Number(r.amount) }))
 }
 
-export async function addExpense(userid: string, category: string, amount: number, dateofexpense: string): Promise<ExpenseEntry> {
+export async function addExpense(
+  userid: string,
+  category: string,
+  amount: number,
+  dateofexpense: string,
+  description: string,
+): Promise<ExpenseEntry> {
   const { rows } = await getPool().query(
-    `insert into expenses (category, amount, userid, dateofexpense)
-     values ($1, $2, $3, $4)
-     returning expenseid, category, amount, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense`,
-    [category, amount, userid, dateofexpense],
+    `insert into expenses (category, amount, userid, dateofexpense, description)
+     values ($1, $2, $3, $4, $5)
+     returning expenseid, category, amount, coalesce(description, '') as description, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense`,
+    [category, amount, userid, dateofexpense, description],
   )
   return { ...rows[0], amount: Number(rows[0].amount) }
 }
@@ -131,13 +138,14 @@ export async function updateExpense(
   category: string,
   amount: number,
   dateofexpense: string,
+  description: string,
 ): Promise<ExpenseEntry> {
   const { rows } = await getPool().query(
-    `update expenses set category = $1, amount = $2, dateofexpense = $3
-     where expenseid = $4 and userid = $5
-     returning expenseid, category, amount, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense`,
-    [category, amount, dateofexpense, expenseid, userid],
-  ) 
+    `update expenses set category = $1, amount = $2, dateofexpense = $3, description = $4
+     where expenseid = $5 and userid = $6
+     returning expenseid, category, amount, coalesce(description, '') as description, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense`,
+    [category, amount, dateofexpense, description, expenseid, userid],
+  )
   if (!rows[0]) {
     throw new Error('EXPENSE_NOT_FOUND')
   }

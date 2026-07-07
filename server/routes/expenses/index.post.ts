@@ -8,6 +8,7 @@ export default defineEventHandler(async (event) => {
   const category = String(body?.category ?? '').trim()
   const amount = Number(body?.amount)
   const dateofexpense = String(body?.dateofexpense ?? '').trim()
+  const description = String(body?.description ?? '').trim()
 
   if (!userid || !category) {
     throw createError({ statusCode: 400, statusMessage: 'userid and category are required' })
@@ -19,5 +20,5 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'dateofexpense must be a valid YYYY-MM-DD date' })
   }
 
-  return await addExpense(userid, category, amount, dateofexpense)
+  return await addExpense(userid, category, amount, dateofexpense, description)
 })
