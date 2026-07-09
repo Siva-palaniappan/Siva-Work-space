@@ -46,14 +46,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { formatDate } from '~/composables/useFormatDate'
 
 const router = useRouter()
 const categories = ref<Array<{ catid: string; category: string; createdon: string; userid: string }>>([])
 const newCategory = ref('')
 const errorMessage = ref('')
 let userid = ''
-
-const formatDate = (value: string) => new Date(value).toLocaleDateString()
 
 const loadCategories = async () => {
   categories.value = await $fetch('/categories', { query: { userid } })
