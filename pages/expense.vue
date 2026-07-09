@@ -154,34 +154,43 @@
     <!-- Add / Edit expense popup -->
     <v-dialog v-model="dialogOpen" max-width="380">
       <div class="modal-card">
-        <p class="modal-title">{{ editingEntry ? 'Edit' : 'Add' }} Expense</p>
+        <div class="modal-header">
+          <span
+            class="modal-cat-icon"
+            :style="{ background: modalCategoryStyle.bg, color: modalCategoryStyle.color }"
+          >
+            <i :class="'mdi ' + modalCategoryStyle.icon" />
+          </span>
+          <div class="modal-header-text">
+            <p class="modal-title">{{ editingEntry ? 'Edit Expense' : 'Add Expense' }}</p>
+            <select v-if="editingEntry" v-model="selectedCategoryName" class="modal-select modal-select-inline">
+              <option v-for="cat in categories" :key="cat.catid" :value="cat.category">{{ cat.category }}</option>
+            </select>
+            <p v-else class="modal-category">{{ dialogCategory?.category }}</p>
+          </div>
+        </div>
 
-        <template v-if="editingEntry">
-          <label class="modal-label">Category</label>
-          <select v-model="selectedCategoryName" class="modal-select">
-            <option v-for="cat in categories" :key="cat.catid" :value="cat.category">{{ cat.category }}</option>
-          </select>
-        </template>
-        <p v-else class="modal-category">{{ dialogCategory?.category }}</p>
+        <label class="modal-label">Amount</label>
+        <div class="amount-field">
+          <span class="currency-sign">₹</span>
+          <input
+            v-model="amount"
+            type="number"
+            class="amount-input"
+            autofocus
+            @keyup.enter="onSubmitExpense"
+          >
+        </div>
 
         <label class="modal-label">Date</label>
         <input v-model="expenseDate" type="date" class="modal-input">
 
-        <label class="modal-label">Amount</label>
-        <input
-          v-model="amount"
-          type="number"
-          class="modal-input"
-          autofocus
-          @keyup.enter="onSubmitExpense"
-        >
-
         <label class="modal-label">Description (optional)</label>
-        <textarea v-model="description" class="modal-textarea" rows="2" />
+        <textarea v-model="description" class="modal-textarea" rows="2" placeholder="Add a note..." />
 
         <div class="modal-actions">
+          <button class="modal-btn solid" @click="onSubmitExpense">Save Expense</button>
           <button class="modal-btn ghost" @click="dialogOpen = false">Cancel</button>
-          <button class="modal-btn solid" @click="onSubmitExpense">Submit</button>
         </div>
       </div>
     </v-dialog>
@@ -290,6 +299,10 @@ const categoryStyle = (name: string): CategoryStyle => {
   const idx = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % FALLBACK_PALETTE.length
   return FALLBACK_PALETTE[idx]
 }
+
+const modalCategoryStyle = computed(() =>
+  categoryStyle(editingEntry.value ? selectedCategoryName.value : dialogCategory.value?.category || ''),
+)
 
 const loadCategories = async () => {
   categories.value = await $fetch('/categories', { query: { userid } })
@@ -409,23 +422,6 @@ onMounted(async () => {
 
 <style scoped>
 .page-wrap {
-  --green-900: #04342c;
-  --green-800: #085041;
-  --green-600: #0f6e56;
-  --green-400: #1d9e75;
-  --green-200: #9fe1cb;
-  --green-100: #c0dd97;
-  --green-50: #e1f5ee;
-  --amber-50: #faeeda;
-  --amber-200: #ef9f27;
-  --amber-800: #633806;
-  --cream: #f7f4ee;
-  --text-primary: #2c2c2a;
-  --text-secondary: #5f5e5a;
-  --text-muted: #888780;
-  --border: #e5e2d9;
-  --radius: 10px;
-
   min-height: 100%;
   display: flex;
   justify-content: center;
@@ -792,30 +788,94 @@ onMounted(async () => {
 
 .modal-card {
   background: #fff;
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(4, 52, 44, 0.18);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.modal-cat-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  flex-shrink: 0;
+}
+
+.modal-header-text {
+  min-width: 0;
 }
 
 .modal-title {
-  margin: 0 0 14px;
-  font-size: 16px;
-  font-weight: 600;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
 .modal-category {
-  margin: 0 0 12px;
-  font-size: 14px;
+  margin: 2px 0 0;
+  font-size: 13px;
   font-weight: 500;
   color: var(--green-800);
 }
 
+.modal-select-inline {
+  margin-top: 2px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--green-800);
+  padding: 0;
+  cursor: pointer;
+}
+
 .modal-label {
   display: block;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+
+.amount-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid var(--green-100);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--green-50);
+}
+
+.currency-sign {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--green-800);
+}
+
+.amount-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--green-800);
+  font-family: inherit;
+  min-width: 0;
 }
 
 .modal-input,
@@ -824,12 +884,20 @@ onMounted(async () => {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 8px 10px;
+  padding: 9px 12px;
   font-size: 13px;
   color: var(--text-primary);
   font-family: inherit;
   outline: none;
   background: #fff;
+  transition: border-color 0.15s;
+}
+
+.modal-input:focus,
+.modal-select:focus,
+.modal-textarea:focus,
+.amount-field:focus-within {
+  border-color: var(--green-600);
 }
 
 .modal-textarea {
@@ -838,18 +906,19 @@ onMounted(async () => {
 
 .modal-actions {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 22px;
 }
 
 .modal-btn {
-  border-radius: var(--radius);
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
+  width: 100%;
 }
 
 .modal-btn.ghost {
@@ -861,5 +930,27 @@ onMounted(async () => {
 .modal-btn.solid {
   background: var(--green-600);
   color: #fff;
+  box-shadow: 0 8px 16px rgba(15, 110, 86, 0.25);
+}
+</style>
+
+<style>
+:root {
+  --green-900: #04342c;
+  --green-800: #085041;
+  --green-600: #0f6e56;
+  --green-400: #1d9e75;
+  --green-200: #9fe1cb;
+  --green-100: #c0dd97;
+  --green-50: #e1f5ee;
+  --amber-50: #faeeda;
+  --amber-200: #ef9f27;
+  --amber-800: #633806;
+  --cream: #f7f4ee;
+  --text-primary: #2c2c2a;
+  --text-secondary: #5f5e5a;
+  --text-muted: #888780;
+  --border: #e5e2d9;
+  --radius: 10px;
 }
 </style>
