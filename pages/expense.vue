@@ -1,206 +1,197 @@
 <template>
-  <v-container class="fill-height d-flex justify-center align-start pt-10" fluid>
-    <v-row class="w-100" justify="center">
-      <v-col cols="12" sm="10" md="6">
-        <v-card class="pa-6 pa-md-8 rounded-xl" elevation="10">
-          <v-card-title class="text-h5 text-center mb-4">
-            Expenses
-          </v-card-title>
-
-          <v-tabs v-model="tab" grow class="mb-4">
-            <v-tab value="add">Add Expense</v-tab>
-            <v-tab value="all">View All</v-tab>
-            <v-tab value="total">View Total</v-tab>
-            <v-tab value="byDate">View by Date</v-tab>
-          </v-tabs>
-
-          <v-alert v-if="errorMessage" type="error" density="compact" class="mb-4" variant="tonal">
-            {{ errorMessage }}
-          </v-alert>
-
-          <div v-if="tab === 'all' || tab === 'total' || tab === 'byDate'" class="d-flex align-center mb-4" style="gap: 8px;">
-            <v-text-field
-              v-model="dateFrom"
-              label="From"
-              type="date"
-              variant="outlined"
-              density="compact"
-              hide-details
-            />
-            <v-text-field
-              v-model="dateTo"
-              label="To"
-              type="date"
-              variant="outlined"
-              density="compact"
-              hide-details
-            />
-            <v-btn variant="text" :disabled="!dateFrom && !dateTo" @click="clearDateFilter">Clear</v-btn>
+  <div class="page-wrap">
+    <div class="phone">
+      <div class="header">
+        <div class="header-top">
+          <div>
+            <p class="eyebrow">This month</p>
+            <h1>Expenses</h1>
           </div>
+          <div class="icon-badge"><i class="mdi mdi-feather" /></div>
+        </div>
+        <div class="header-total">
+          <p>Total spent</p>
+          <p>{{ formatCurrency(entriesTotal) }}</p>
+        </div>
+      </div>
 
-          <v-window v-model="tab">
-            <!-- Add Expense -->
-            <v-window-item value="add">
-              <p v-if="!categories.length" class="text-center text-grey mt-6">
-                No categories yet. <NuxtLink to="/category">Add one first</NuxtLink>.
-              </p>
-              <v-row v-else>
-                <v-col
-                  v-for="cat in categories"
-                  :key="cat.catid"
-                  cols="6"
-                  sm="4"
+      <div class="tabs">
+        <button :class="['tab-btn', { active: tab === 'add' }]" @click="tab = 'add'">
+          <i class="mdi mdi-plus" />Add
+        </button>
+        <button :class="['tab-btn', { active: tab === 'total' }]" @click="tab = 'total'">
+          <i class="mdi mdi-chart-donut" />Total
+        </button>
+        <button :class="['tab-btn', 'date-tab', { active: tab === 'byDate' }]" @click="tab = 'byDate'">
+          <i class="mdi mdi-calendar-month" />By date
+        </button>
+      </div>
+
+      <v-alert v-if="errorMessage" type="error" density="compact" class="mx-3 mt-3" variant="tonal">
+        {{ errorMessage }}
+      </v-alert>
+
+      <div v-if="tab === 'total' || tab === 'byDate'" class="date-filters">
+        <label class="date-field">
+          <i class="mdi mdi-calendar-blank" />
+          <input v-model="dateFrom" type="date" aria-label="From date">
+        </label>
+        <label class="date-field">
+          <i class="mdi mdi-calendar-blank" />
+          <input v-model="dateTo" type="date" aria-label="To date">
+        </label>
+        <button class="clear-btn" aria-label="Clear dates" :disabled="!dateFrom && !dateTo" @click="clearDateFilter">
+          <i class="mdi mdi-close" />
+        </button>
+      </div>
+
+      <div v-if="tab === 'byDate'" class="view-edit-row">
+        <div class="segmented">
+          <button :class="{ active: dateViewMode === 'view' }" @click="dateViewMode = 'view'">
+            <i class="mdi mdi-eye-outline" />View
+          </button>
+          <button :class="{ active: dateViewMode === 'edit' }" @click="dateViewMode = 'edit'">
+            <i class="mdi mdi-pencil-outline" />Edit
+          </button>
+        </div>
+      </div>
+
+      <div class="list">
+        <!-- Add Expense -->
+        <template v-if="tab === 'add'">
+          <p v-if="!categories.length" class="empty-note">
+            No categories yet. <NuxtLink to="/category">Add one first</NuxtLink>.
+          </p>
+          <div v-else class="category-grid">
+            <button
+              v-for="cat in categories"
+              :key="cat.catid"
+              class="category-card"
+              @click="openAddDialog(cat)"
+            >
+              <span
+                class="cat-icon-lg"
+                :style="{ background: categoryStyle(cat.category).bg, color: categoryStyle(cat.category).color }"
+              >
+                <i :class="'mdi ' + categoryStyle(cat.category).icon" />
+              </span>
+              <span>{{ cat.category }}</span>
+            </button>
+          </div>
+        </template>
+
+        <!-- View Total -->
+        <template v-else-if="tab === 'total'">
+          <div v-if="totals.length">
+            <div v-for="item in totals" :key="item.catid" class="expense-row">
+              <div
+                class="cat-icon"
+                :style="{ background: categoryStyle(item.category).bg, color: categoryStyle(item.category).color }"
+              >
+                <i :class="'mdi ' + categoryStyle(item.category).icon" />
+              </div>
+              <div class="expense-info">
+                <p class="name">{{ item.category }}</p>
+              </div>
+              <div class="expense-amount">{{ formatCurrency(item.amount) }}</div>
+            </div>
+          </div>
+          <p v-else class="empty-note">No categories yet.</p>
+
+          <div v-if="totals.length" class="total-bar">
+            <span>Total</span>
+            <span>{{ formatCurrency(categoriesTotal) }}</span>
+          </div>
+        </template>
+
+        <!-- View by Date -->
+        <template v-else-if="tab === 'byDate'">
+          <template v-if="entriesByDate.length">
+            <template v-for="group in entriesByDate" :key="group.date">
+              <div class="date-divider">
+                <span>{{ formatDate(group.date) }}</span>
+                <div class="rule" />
+                <span>{{ formatCurrency(group.total) }}</span>
+              </div>
+              <div
+                v-for="item in group.entries"
+                :key="item.expenseid"
+                class="expense-row"
+                :class="{ 'edit-mode': dateViewMode === 'edit' }"
+              >
+                <div
+                  class="cat-icon"
+                  :style="{ background: categoryStyle(item.category).bg, color: categoryStyle(item.category).color }"
                 >
-                  <v-card
-                    class="pa-4 text-center rounded-lg"
-                    variant="tonal"
-                    color="primary"
-                    @click="openAddDialog(cat)"
-                  >
-                    {{ cat.category }}
-                  </v-card>
-                </v-col>
-              </v-row>
-            </v-window-item>
-
-            <!-- View All -->
-            <v-window-item value="all">
-              <v-list v-if="entries.length" lines="two">
-                <v-list-item
-                  v-for="item in entries"
-                  :key="item.expenseid"
-                  :title="`${item.category} — ${item.amount.toFixed(2)}`"
-                  :subtitle="item.description ? `${formatDate(item.dateofexpense)} — ${item.description}` : formatDate(item.dateofexpense)"
-                >
-                  <template #append>
-                    <v-btn icon="mdi-pencil" variant="text" size="small" @click="openEditDialog(item)" />
-                    <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="onDeleteExpense(item)" />
-                  </template>
-                </v-list-item>
-              </v-list>
-              <p v-else class="text-center text-grey mt-6">No expenses recorded yet.</p>
-
-              <template v-if="entries.length">
-                <v-divider class="mt-2" />
-                <div class="d-flex justify-space-between align-center px-2 py-3">
-                  <span class="font-weight-bold">Total</span>
-                  <span class="font-weight-bold">{{ entriesTotal.toFixed(2) }}</span>
+                  <i :class="'mdi ' + categoryStyle(item.category).icon" />
                 </div>
-              </template>
-            </v-window-item>
-
-            <!-- View Total -->
-            <v-window-item value="total">
-              <v-list v-if="totals.length" lines="one">
-                <v-list-item
-                  v-for="item in totals"
-                  :key="item.catid"
-                  :title="item.category"
-                >
-                  <template #append>
-                    <span class="font-weight-medium">{{ item.amount.toFixed(2) }}</span>
-                  </template>
-                </v-list-item>
-              </v-list>
-              <p v-else class="text-center text-grey mt-6">No categories yet.</p>
-
-              <template v-if="totals.length">
-                <v-divider class="mt-2" />
-                <div class="d-flex justify-space-between align-center px-2 py-3">
-                  <span class="font-weight-bold">Total</span>
-                  <span class="font-weight-bold">{{ categoriesTotal.toFixed(2) }}</span>
+                <div class="expense-info">
+                  <p class="name">{{ item.category }}</p>
+                  <p v-if="item.description" class="note">{{ item.description }}</p>
                 </div>
-              </template>
-            </v-window-item>
-
-            <!-- View by Date -->
-            <v-window-item value="byDate">
-              <div v-if="entriesByDate.length">
-                <div v-for="group in entriesByDate" :key="group.date" class="mb-4">
-                  <div class="text-subtitle-2 font-weight-bold px-2 mb-1">
-                    {{ formatDate(group.date) }}
-                  </div>
-                  <v-list lines="two" density="compact">
-                    <v-list-item
-                      v-for="item in group.entries"
-                      :key="item.expenseid"
-                      :title="`${item.category} — ${item.amount.toFixed(2)}`"
-                      :subtitle="item.description || undefined"
-                    >
-                      <template #append>
-                        <v-btn icon="mdi-pencil" variant="text" size="small" @click="openEditDialog(item)" />
-                        <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="onDeleteExpense(item)" />
-                      </template>
-                    </v-list-item>
-                  </v-list>
-                  <v-divider class="mt-1" />
-                  <div class="d-flex justify-space-between align-center px-2 py-2">
-                    <span class="font-weight-medium text-caption">Total for {{ formatDate(group.date) }}</span>
-                    <span class="font-weight-medium">{{ group.total.toFixed(2) }}</span>
-                  </div>
+                <div class="expense-amount">{{ formatCurrency(item.amount) }}</div>
+                <div v-if="dateViewMode === 'edit'" class="row-actions">
+                  <button class="edit-icon" aria-label="Edit expense" @click="openEditDialog(item)">
+                    <i class="mdi mdi-pencil" />
+                  </button>
+                  <button class="delete-icon" aria-label="Delete expense" @click="onDeleteExpense(item)">
+                    <i class="mdi mdi-trash-can-outline" />
+                  </button>
                 </div>
               </div>
-              <p v-else class="text-center text-grey mt-6">No expenses recorded yet.</p>
-            </v-window-item>
-          </v-window>
-        </v-card>
-      </v-col>
-    </v-row>
+            </template>
+
+            <div class="total-bar">
+              <span>Total, all dates</span>
+              <span>{{ formatCurrency(entriesTotal) }}</span>
+            </div>
+          </template>
+          <p v-else class="empty-note">No expenses recorded yet.</p>
+        </template>
+      </div>
+    </div>
 
     <!-- Add / Edit expense popup -->
-    <v-dialog v-model="dialogOpen" max-width="400">
-      <v-card class="pa-4 rounded-xl">
-        <v-card-title>{{ editingEntry ? 'Edit' : 'Add' }} Expense</v-card-title>
-        <v-card-text>
-          <v-select
-            v-if="editingEntry"
-            v-model="selectedCategoryName"
-            :items="categories.map(c => c.category)"
-            label="Category"
-            variant="outlined"
-            class="mb-2"
-          />
-          <div v-else class="mb-2 text-subtitle-1">{{ dialogCategory?.category }}</div>
+    <v-dialog v-model="dialogOpen" max-width="380">
+      <div class="modal-card">
+        <p class="modal-title">{{ editingEntry ? 'Edit' : 'Add' }} Expense</p>
 
-          <v-text-field
-            v-model="expenseDate"
-            label="Date"
-            type="date"
-            variant="outlined"
-            class="mb-2"
-          />
+        <template v-if="editingEntry">
+          <label class="modal-label">Category</label>
+          <select v-model="selectedCategoryName" class="modal-select">
+            <option v-for="cat in categories" :key="cat.catid" :value="cat.category">{{ cat.category }}</option>
+          </select>
+        </template>
+        <p v-else class="modal-category">{{ dialogCategory?.category }}</p>
 
-          <v-text-field
-            v-model="amount"
-            label="Amount"
-            type="number"
-            variant="outlined"
-            class="mb-2"
-            autofocus
-            @keyup.enter="onSubmitExpense"
-          />
+        <label class="modal-label">Date</label>
+        <input v-model="expenseDate" type="date" class="modal-input">
 
-          <v-textarea
-            v-model="description"
-            label="Description (optional)"
-            variant="outlined"
-            rows="2"
-            auto-grow
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="dialogOpen = false">Cancel</v-btn>
-          <v-btn color="primary" @click="onSubmitExpense">Submit</v-btn>
-        </v-card-actions>
-      </v-card>
+        <label class="modal-label">Amount</label>
+        <input
+          v-model="amount"
+          type="number"
+          class="modal-input"
+          autofocus
+          @keyup.enter="onSubmitExpense"
+        >
+
+        <label class="modal-label">Description (optional)</label>
+        <textarea v-model="description" class="modal-textarea" rows="2" />
+
+        <div class="modal-actions">
+          <button class="modal-btn ghost" @click="dialogOpen = false">Cancel</button>
+          <button class="modal-btn solid" @click="onSubmitExpense">Submit</button>
+        </div>
+      </div>
     </v-dialog>
-  </v-container>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { formatDate } from '~/composables/useFormatDate'
 
 interface Category {
   catid: string
@@ -246,6 +237,7 @@ const description = ref('')
 
 const dateFrom = ref('')
 const dateTo = ref('')
+const dateViewMode = ref<'view' | 'edit'>('view')
 
 let userid = ''
 
@@ -267,7 +259,37 @@ const entriesByDate = computed<DateGroup[]>(() => {
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
-const formatDate = (value: string) => new Date(value).toLocaleDateString()
+const formatCurrency = (value: number) => `₹${value.toFixed(2)}`
+
+interface CategoryStyle {
+  icon: string
+  bg: string
+  color: string
+}
+
+const CATEGORY_ICON_MAP: Array<{ match: RegExp } & CategoryStyle> = [
+  { match: /veg/i, icon: 'mdi-carrot', bg: 'var(--green-50)', color: 'var(--green-800)' },
+  { match: /fruit/i, icon: 'mdi-food-apple-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
+  { match: /grocer/i, icon: 'mdi-cart-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
+  { match: /milk|dairy/i, icon: 'mdi-cup-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
+  { match: /transport|fuel|petrol|gas|car/i, icon: 'mdi-gas-station-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
+  { match: /rent|house|home/i, icon: 'mdi-home-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
+  { match: /health|medic|pharma/i, icon: 'mdi-medical-bag', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
+  { match: /entertain|movie|game/i, icon: 'mdi-movie-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
+  { match: /outside|restaurant|food|eat/i, icon: 'mdi-silverware-fork-knife', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
+]
+
+const FALLBACK_PALETTE: CategoryStyle[] = [
+  { icon: 'mdi-wallet-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
+  { icon: 'mdi-wallet-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
+]
+
+const categoryStyle = (name: string): CategoryStyle => {
+  const found = CATEGORY_ICON_MAP.find(m => m.match.test(name))
+  if (found) return found
+  const idx = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % FALLBACK_PALETTE.length
+  return FALLBACK_PALETTE[idx]
+}
 
 const loadCategories = async () => {
   categories.value = await $fetch('/categories', { query: { userid } })
@@ -384,3 +406,460 @@ onMounted(async () => {
   await Promise.all([loadCategories(), loadExpenses()])
 })
 </script>
+
+<style scoped>
+.page-wrap {
+  --green-900: #04342c;
+  --green-800: #085041;
+  --green-600: #0f6e56;
+  --green-400: #1d9e75;
+  --green-200: #9fe1cb;
+  --green-100: #c0dd97;
+  --green-50: #e1f5ee;
+  --amber-50: #faeeda;
+  --amber-200: #ef9f27;
+  --amber-800: #633806;
+  --cream: #f7f4ee;
+  --text-primary: #2c2c2a;
+  --text-secondary: #5f5e5a;
+  --text-muted: #888780;
+  --border: #e5e2d9;
+  --radius: 10px;
+
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 24px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.phone {
+  width: 420px;
+  max-width: 100%;
+  background: #fff;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.header {
+  background: var(--green-600);
+  padding: 20px 18px 16px;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-top .eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--green-100);
+}
+
+.header-top h1 {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.icon-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 19px;
+}
+
+.header-total {
+  margin-top: 16px;
+}
+
+.header-total p:first-child {
+  margin: 0;
+  font-size: 13px;
+  color: var(--green-100);
+}
+
+.header-total p:last-child {
+  margin: 2px 0 0;
+  font-size: 30px;
+  font-weight: 600;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 14px 0;
+}
+
+.tab-btn {
+  flex: 1;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-btn.active {
+  background: var(--green-600);
+  color: #fff;
+  border-color: var(--green-600);
+}
+
+.tab-btn.active.date-tab {
+  background: var(--green-50);
+  color: var(--green-800);
+  border-color: var(--green-50);
+}
+
+.date-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 14px 0;
+}
+
+.date-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.date-field input {
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-primary);
+  width: 100%;
+  outline: none;
+  font-family: inherit;
+}
+
+.clear-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+}
+
+.clear-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.view-edit-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 14px 4px;
+}
+
+.segmented {
+  display: flex;
+  background: var(--cream);
+  border-radius: var(--radius);
+  padding: 3px;
+  border: 1px solid var(--border);
+}
+
+.segmented button {
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.segmented button.active {
+  background: var(--green-50);
+  color: var(--green-800);
+}
+
+.list {
+  padding: 4px 14px 8px;
+}
+
+.empty-note {
+  text-align: center;
+  color: var(--text-muted);
+  margin-top: 24px;
+  font-size: 13px;
+}
+
+.date-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 8px;
+}
+
+.date-divider span:first-child {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.date-divider .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.date-divider span:last-child {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.expense-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.date-divider + .expense-row {
+  border-top: none;
+}
+
+.cat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 17px;
+}
+
+.expense-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.expense-info .name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.expense-info .note {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expense-amount {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.expense-row.edit-mode .expense-amount {
+  display: none;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 8px;
+}
+
+.row-actions button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  padding: 4px;
+}
+
+.row-actions .edit-icon {
+  color: var(--green-600);
+}
+
+.row-actions .delete-icon {
+  color: #b23a3a;
+}
+
+.total-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--green-50);
+  margin: 12px 0;
+  border-radius: 12px;
+}
+
+.total-bar span:first-child {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--green-800);
+}
+
+.total-bar span:last-child {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--green-800);
+  font-variant-numeric: tabular-nums;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--cream);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.category-card:hover {
+  background: var(--green-50);
+  border-color: var(--green-50);
+}
+
+.cat-icon-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.modal-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.modal-title {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-category {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--green-800);
+}
+
+.modal-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 10px 0 4px;
+}
+
+.modal-input,
+.modal-select,
+.modal-textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  background: #fff;
+}
+
+.modal-textarea {
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.modal-btn {
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.modal-btn.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.modal-btn.solid {
+  background: var(--green-600);
+  color: #fff;
+}
+</style>
