@@ -142,12 +142,25 @@
                 </div>
                 <div class="expense-amount">{{ formatCurrency(item.amount) }}</div>
                 <div v-if="dateViewMode === 'edit'" class="row-actions">
-                  <button class="edit-icon" aria-label="Edit expense" @click="openEditDialog(item)">
-                    <i class="mdi mdi-pencil" />
-                  </button>
-                  <button class="delete-icon" aria-label="Delete expense" @click="onDeleteExpense(item)">
-                    <i class="mdi mdi-trash-can-outline" />
-                  </button>
+                  <v-btn
+                    icon="mdi-pencil"
+                    variant="text"
+                    size="small"
+                    class="edit-icon"
+                    :disabled="deletingExpenseId === item.expenseid"
+                    aria-label="Edit expense"
+                    @click="openEditDialog(item)"
+                  />
+                  <v-btn
+                    icon="mdi-trash-can-outline"
+                    variant="text"
+                    size="small"
+                    class="delete-icon"
+                    :loading="deletingExpenseId === item.expenseid"
+                    :disabled="deletingExpenseId === item.expenseid"
+                    aria-label="Delete expense"
+                    @click="onDeleteExpense(item)"
+                  />
                 </div>
               </div>
             </template>
@@ -174,8 +187,8 @@
           </span>
           <div class="modal-header-text">
             <p class="modal-title">{{ editingEntry ? 'Edit Expense' : 'Add Expense' }}</p>
-            <select v-if="editingEntry" v-model="selectedCategoryName" class="modal-select modal-select-inline">
-              <option v-for="cat in categories" :key="cat.catid" :value="cat.category">{{ cat.category }}</option>
+            <select v-if="editingEntry" v-model="selectedCatId" class="modal-select modal-select-inline">
+              <option v-for="cat in categories" :key="cat.catid" :value="cat.catid">{{ cat.category }}</option>
             </select>
             <p v-else class="modal-category">{{ dialogCategory?.category }}</p>
           </div>
@@ -200,8 +213,17 @@
         <textarea v-model="description" class="modal-textarea" rows="2" placeholder="Add a note..." />
 
         <div class="modal-actions">
-          <button class="modal-btn solid" @click="onSubmitExpense">Save Expense</button>
-          <button class="modal-btn ghost" @click="dialogOpen = false">Cancel</button>
+          <v-btn
+            class="modal-btn solid"
+            :loading="submittingExpense"
+            :disabled="submittingExpense"
+            @click="onSubmitExpense"
+          >
+            Save Expense
+          </v-btn>
+          <v-btn class="modal-btn ghost" variant="text" :disabled="submittingExpense" @click="dialogOpen = false">
+            Cancel
+          </v-btn>
         </div>
       </div>
     </v-dialog>
@@ -222,6 +244,7 @@ interface Category {
 
 interface ExpenseEntry {
   expenseid: string
+  catid: string
   category: string
   amount: number
   description: string
@@ -252,10 +275,12 @@ const errorMessage = ref('')
 const dialogOpen = ref(false)
 const dialogCategory = ref<Category | null>(null)
 const editingEntry = ref<ExpenseEntry | null>(null)
-const selectedCategoryName = ref('')
+const selectedCatId = ref('')
 const amount = ref('')
 const expenseDate = ref('')
 const description = ref('')
+const submittingExpense = ref(false)
+const deletingExpenseId = ref<string | null>(null)
 
 const dateFrom = ref('')
 const dateTo = ref('')
@@ -313,9 +338,14 @@ const categoryStyle = (name: string): CategoryStyle => {
   return FALLBACK_PALETTE[idx]
 }
 
-const modalCategoryStyle = computed(() =>
-  categoryStyle(editingEntry.value ? selectedCategoryName.value : dialogCategory.value?.category || ''),
-)
+const activeCategory = computed<Category | null>(() => {
+  if (editingEntry.value) {
+    return categories.value.find(c => c.catid === selectedCatId.value) || null
+  }
+  return dialogCategory.value
+})
+
+const modalCategoryStyle = computed(() => categoryStyle(activeCategory.value?.category || ''))
 
 const budgetPercent = (item: ExpenseTotal) => {
   if (!item.budget) return 0
@@ -362,7 +392,7 @@ watch([dateFrom, dateTo], () => {
 const openAddDialog = (cat: Category) => {
   editingEntry.value = null
   dialogCategory.value = cat
-  selectedCategoryName.value = cat.category
+  selectedCatId.value = cat.catid
   amount.value = ''
   expenseDate.value = todayStr()
   description.value = ''
@@ -373,7 +403,7 @@ const openAddDialog = (cat: Category) => {
 const openEditDialog = (entry: ExpenseEntry) => {
   editingEntry.value = entry
   dialogCategory.value = null
-  selectedCategoryName.value = entry.category
+  selectedCatId.value = entry.catid
   amount.value = String(entry.amount)
   expenseDate.value = entry.dateofexpense
   description.value = entry.description
@@ -384,9 +414,9 @@ const openEditDialog = (entry: ExpenseEntry) => {
 const onSubmitExpense = async () => {
   errorMessage.value = ''
   const value = Number(amount.value)
-  const category = selectedCategoryName.value
+  const catid = activeCategory.value?.catid
 
-  if (!category || !Number.isFinite(value) || value <= 0) {
+  if (!catid || !Number.isFinite(value) || value <= 0) {
     errorMessage.value = 'Enter a valid amount.'
     return
   }
@@ -395,6 +425,7 @@ const onSubmitExpense = async () => {
     return
   }
 
+  submittingExpense.value = true
   try {
     if (editingEntry.value) {
       await $fetch('/expenses', {
@@ -402,7 +433,7 @@ const onSubmitExpense = async () => {
         body: {
           userid,
           expenseid: editingEntry.value.expenseid,
-          category,
+          catid,
           amount: value,
           dateofexpense: expenseDate.value,
           description: description.value,
@@ -411,13 +442,15 @@ const onSubmitExpense = async () => {
     } else {
       await $fetch('/expenses', {
         method: 'POST',
-        body: { userid, category, amount: value, dateofexpense: expenseDate.value, description: description.value },
+        body: { userid, catid, amount: value, dateofexpense: expenseDate.value, description: description.value },
       })
     }
     dialogOpen.value = false
     await loadExpenses()
   } catch (err: any) {
     errorMessage.value = err?.data?.statusMessage || 'Failed to save expense'
+  } finally {
+    submittingExpense.value = false
   }
 }
 
@@ -425,6 +458,7 @@ const onDeleteExpense = async (entry: ExpenseEntry) => {
   if (!confirm(`Delete this ${entry.category} expense of ${entry.amount}?`)) return
 
   errorMessage.value = ''
+  deletingExpenseId.value = entry.expenseid
   try {
     await $fetch('/expenses', {
       method: 'DELETE',
@@ -433,6 +467,8 @@ const onDeleteExpense = async (entry: ExpenseEntry) => {
     await loadExpenses()
   } catch (err: any) {
     errorMessage.value = err?.data?.statusMessage || 'Failed to delete expense'
+  } finally {
+    deletingExpenseId.value = null
   }
 }
 

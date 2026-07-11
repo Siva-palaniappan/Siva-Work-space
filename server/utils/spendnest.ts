@@ -19,6 +19,7 @@ export interface CategoryRow {
 
 export interface ExpenseEntry {
   expenseid: string
+  catid: string
   category: string
   amount: number
   description: string
@@ -102,34 +103,78 @@ export async function createCategory(userid: string, category: string, budget: n
   }
 }
 
-export async function updateCategoryBudget(userid: string, catid: string, budget: number | null): Promise<CategoryRow> {
-  const { rows } = await getPool().query(
-    `update categories set budget = $1
-     where catid = $2 and userid = $3
-     returning catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid, budget`,
-    [budget, catid, userid],
-  )
-  if (!rows[0]) {
+// Since expenses only ever reference catid (not a duplicated name), renaming a
+// category needs no cascade at all -- every linked expense resolves the new
+// name automatically through the join in getExpenses.
+export async function updateCategory(
+  userid: string,
+  catid: string,
+  changes: { category?: string; budget?: number | null },
+): Promise<CategoryRow> {
+  const sets: string[] = []
+  const params: any[] = []
+
+  if (changes.category !== undefined) {
+    params.push(changes.category)
+    sets.push(`category = $${params.length}`)
+  }
+  if ('budget' in changes) {
+    params.push(changes.budget)
+    sets.push(`budget = $${params.length}`)
+  }
+  if (!sets.length) {
+    throw new Error('NOTHING_TO_UPDATE')
+  }
+
+  params.push(catid, userid)
+
+  try {
+    const { rows } = await getPool().query(
+      `update categories set ${sets.join(', ')}
+       where catid = $${params.length - 1} and userid = $${params.length}
+       returning catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid, budget`,
+      params,
+    )
+    if (!rows[0]) {
+      throw new Error('CATEGORY_NOT_FOUND')
+    }
+    return withBudgetNumber(rows[0])
+  } catch (err: any) {
+    if (err.code === '23505') {
+      throw new Error('CATEGORY_EXISTS')
+    }
+    throw err
+  }
+}
+
+// Relies on expenses.catid's ON DELETE CASCADE foreign key -- deleting the
+// category row automatically removes every expense that referenced it.
+export async function deleteCategory(userid: string, catid: string): Promise<void> {
+  const { rowCount } = await getPool().query('delete from categories where catid = $1 and userid = $2', [catid, userid])
+  if (rowCount === 0) {
     throw new Error('CATEGORY_NOT_FOUND')
   }
-  return withBudgetNumber(rows[0])
 }
 
 export async function getExpenses(userid: string, from?: string, to?: string): Promise<ExpenseEntry[]> {
-  const conditions = ['userid = $1']
+  const conditions = ['e.userid = $1']
   const params: any[] = [userid]
   if (from) {
     params.push(from)
-    conditions.push(`dateofexpense >= $${params.length}`)
+    conditions.push(`e.dateofexpense >= $${params.length}`)
   }
   if (to) {
     params.push(to)
-    conditions.push(`dateofexpense <= $${params.length}`)
+    conditions.push(`e.dateofexpense <= $${params.length}`)
   }
 
   const { rows } = await getPool().query(
-    `select expenseid, category, amount, coalesce(description, '') as description, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense
-     from expenses where ${conditions.join(' and ')} order by dateofexpense desc`,
+    `select e.expenseid, e.catid, c.category, e.amount, coalesce(e.description, '') as description,
+            to_char(e.dateofexpense, 'YYYY-MM-DD') as dateofexpense
+     from expenses e
+     join categories c on c.catid = e.catid
+     where ${conditions.join(' and ')}
+     order by e.dateofexpense desc`,
     params,
   )
   return rows.map(r => ({ ...r, amount: Number(r.amount) }))
@@ -137,16 +182,22 @@ export async function getExpenses(userid: string, from?: string, to?: string): P
 
 export async function addExpense(
   userid: string,
-  category: string,
+  catid: string,
   amount: number,
   dateofexpense: string,
   description: string,
 ): Promise<ExpenseEntry> {
   const { rows } = await getPool().query(
-    `insert into expenses (category, amount, userid, dateofexpense, description)
-     values ($1, $2, $3, $4, $5)
-     returning expenseid, category, amount, coalesce(description, '') as description, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense`,
-    [category, amount, userid, dateofexpense, description],
+    `with inserted as (
+       insert into expenses (catid, amount, userid, dateofexpense, description)
+       values ($1, $2, $3, $4, $5)
+       returning expenseid, catid, amount, description, dateofexpense
+     )
+     select i.expenseid, i.catid, c.category, i.amount, coalesce(i.description, '') as description,
+            to_char(i.dateofexpense, 'YYYY-MM-DD') as dateofexpense
+     from inserted i
+     join categories c on c.catid = i.catid`,
+    [catid, amount, userid, dateofexpense, description],
   )
   return { ...rows[0], amount: Number(rows[0].amount) }
 }
@@ -154,16 +205,22 @@ export async function addExpense(
 export async function updateExpense(
   userid: string,
   expenseid: string,
-  category: string,
+  catid: string,
   amount: number,
   dateofexpense: string,
   description: string,
 ): Promise<ExpenseEntry> {
   const { rows } = await getPool().query(
-    `update expenses set category = $1, amount = $2, dateofexpense = $3, description = $4
-     where expenseid = $5 and userid = $6
-     returning expenseid, category, amount, coalesce(description, '') as description, to_char(dateofexpense, 'YYYY-MM-DD') as dateofexpense`,
-    [category, amount, dateofexpense, description, expenseid, userid],
+    `with updated as (
+       update expenses set catid = $1, amount = $2, dateofexpense = $3, description = $4
+       where expenseid = $5 and userid = $6
+       returning expenseid, catid, amount, description, dateofexpense
+     )
+     select u.expenseid, u.catid, c.category, u.amount, coalesce(u.description, '') as description,
+            to_char(u.dateofexpense, 'YYYY-MM-DD') as dateofexpense
+     from updated u
+     join categories c on c.catid = u.catid`,
+    [catid, amount, dateofexpense, description, expenseid, userid],
   )
   if (!rows[0]) {
     throw new Error('EXPENSE_NOT_FOUND')

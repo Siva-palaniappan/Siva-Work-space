@@ -26,7 +26,7 @@
               clearable
               @keyup.enter="onAddCategory"
             />
-            <v-btn color="primary" height="56" @click="onAddCategory">
+            <v-btn color="primary" height="56" :loading="addingCategory" :disabled="addingCategory" @click="onAddCategory">
               Add
             </v-btn>
           </div>
@@ -47,7 +47,8 @@
                 {{ cat.budget != null ? `Budget: ₹${cat.budget.toFixed(2)}/month` : 'No budget set' }}
               </template>
               <template #append>
-                <v-btn icon="mdi-pencil" variant="text" size="small" @click="openBudgetDialog(cat)" />
+                <v-btn icon="mdi-pencil" variant="text" size="small" @click="openEditDialog(cat)" />
+                <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="onDeleteCategory(cat)" />
               </template>
             </v-list-item>
           </v-list>
@@ -56,26 +57,59 @@
       </v-col>
     </v-row>
 
-    <!-- Edit budget popup -->
-    <v-dialog v-model="budgetDialogOpen" max-width="360">
+    <!-- Edit category popup -->
+    <v-dialog v-model="editDialogOpen" max-width="380">
       <v-card class="pa-4 rounded-xl">
-        <v-card-title>Set Budget &mdash; {{ budgetDialogCategory?.category }}</v-card-title>
+        <v-card-title>Edit Category</v-card-title>
         <v-card-text>
+          <v-alert type="warning" density="compact" variant="tonal" class="mb-4">
+            If you edit or delete a category, all data associated with that category will also be updated or deleted.
+            Please be careful before performing this operation.
+          </v-alert>
+
           <v-text-field
-            v-model="budgetInput"
+            v-model="editName"
+            label="Category Name"
+            variant="outlined"
+            class="mb-2"
+            clearable
+          />
+          <v-text-field
+            v-model="editBudget"
             label="Monthly Budget"
             type="number"
             variant="outlined"
             hint="Leave blank to remove the budget"
             persistent-hint
-            autofocus
-            @keyup.enter="onSaveBudget"
+            clearable
+            @keyup.enter="onSaveEdit"
           />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="budgetDialogOpen = false">Cancel</v-btn>
-          <v-btn color="primary" @click="onSaveBudget">Save</v-btn>
+          <v-btn variant="text" :disabled="savingEdit" @click="editDialogOpen = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="savingEdit" :disabled="savingEdit" @click="onSaveEdit">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete category popup -->
+    <v-dialog v-model="deleteDialogOpen" max-width="380">
+      <v-card class="pa-4 rounded-xl">
+        <v-card-title>Delete Category</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" density="compact" variant="tonal" class="mb-4">
+            If you edit or delete a category, all data associated with that category will also be updated or deleted.
+            Please be careful before performing this operation.
+          </v-alert>
+          <p>
+            Delete <b>{{ deleteCategoryTarget?.category }}</b> and every expense recorded under it? This cannot be undone.
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="deletingCategory" @click="deleteDialogOpen = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingCategory" :disabled="deletingCategory" @click="onConfirmDelete">Delete</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -101,9 +135,17 @@ const newCategory = ref('')
 const newBudget = ref('')
 const errorMessage = ref('')
 
-const budgetDialogOpen = ref(false)
-const budgetDialogCategory = ref<Category | null>(null)
-const budgetInput = ref('')
+const editDialogOpen = ref(false)
+const editCategory = ref<Category | null>(null)
+const editName = ref('')
+const editBudget = ref('')
+
+const deleteDialogOpen = ref(false)
+const deleteCategoryTarget = ref<Category | null>(null)
+
+const addingCategory = ref(false)
+const savingEdit = ref(false)
+const deletingCategory = ref(false)
 
 let userid = ''
 
@@ -116,6 +158,7 @@ const onAddCategory = async () => {
   const category = newCategory.value.trim()
   if (!category) return
 
+  addingCategory.value = true
   try {
     await $fetch('/categories', {
       method: 'POST',
@@ -126,29 +169,65 @@ const onAddCategory = async () => {
     await loadCategories()
   } catch (err: any) {
     errorMessage.value = err?.data?.statusMessage || 'Failed to add category'
+  } finally {
+    addingCategory.value = false
   }
 }
 
-const openBudgetDialog = (cat: Category) => {
-  budgetDialogCategory.value = cat
-  budgetInput.value = cat.budget != null ? String(cat.budget) : ''
+const openEditDialog = (cat: Category) => {
+  editCategory.value = cat
+  editName.value = cat.category
+  editBudget.value = cat.budget != null ? String(cat.budget) : ''
   errorMessage.value = ''
-  budgetDialogOpen.value = true
+  editDialogOpen.value = true
 }
 
-const onSaveBudget = async () => {
-  if (!budgetDialogCategory.value) return
-  errorMessage.value = ''
+const onSaveEdit = async () => {
+  if (!editCategory.value) return
 
+  errorMessage.value = ''
+  savingEdit.value = true
   try {
     await $fetch('/categories', {
       method: 'PUT',
-      body: { userid, catid: budgetDialogCategory.value.catid, budget: budgetInput.value || null },
+      body: {
+        userid,
+        catid: editCategory.value.catid,
+        category: editName.value.trim(),
+        budget: editBudget.value || null,
+      },
     })
-    budgetDialogOpen.value = false
+    editDialogOpen.value = false
     await loadCategories()
   } catch (err: any) {
-    errorMessage.value = err?.data?.statusMessage || 'Failed to update budget'
+    errorMessage.value = err?.data?.statusMessage || 'Failed to update category'
+  } finally {
+    savingEdit.value = false
+  }
+}
+
+const onDeleteCategory = (cat: Category) => {
+  deleteCategoryTarget.value = cat
+  errorMessage.value = ''
+  deleteDialogOpen.value = true
+}
+
+const onConfirmDelete = async () => {
+  if (!deleteCategoryTarget.value) return
+
+  errorMessage.value = ''
+  deletingCategory.value = true
+  try {
+    await $fetch('/categories', {
+      method: 'DELETE',
+      query: { userid, catid: deleteCategoryTarget.value.catid },
+    })
+    deleteDialogOpen.value = false
+    await loadCategories()
+  } catch (err: any) {
+    errorMessage.value = err?.data?.statusMessage || 'Failed to delete category'
+  } finally {
+    deletingCategory.value = false
   }
 }
 
