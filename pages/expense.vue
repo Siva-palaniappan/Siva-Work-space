@@ -92,6 +92,17 @@
               </div>
               <div class="expense-info">
                 <p class="name">{{ item.category }}</p>
+                <div v-if="item.budget" class="budget-bar-wrap">
+                  <div class="budget-bar">
+                    <div
+                      class="budget-bar-fill"
+                      :style="{ width: budgetPercent(item) + '%', background: budgetBarColor(item) }"
+                    />
+                  </div>
+                  <span class="budget-caption">
+                    {{ formatCurrency(item.monthSpent) }} / {{ formatCurrency(item.budget) }} this month
+                  </span>
+                </div>
               </div>
               <div class="expense-amount">{{ formatCurrency(item.amount) }}</div>
             </div>
@@ -221,6 +232,8 @@ interface ExpenseTotal {
   catid: string
   category: string
   amount: number
+  budget: number | null
+  monthSpent: number
 }
 
 interface DateGroup {
@@ -303,6 +316,19 @@ const categoryStyle = (name: string): CategoryStyle => {
 const modalCategoryStyle = computed(() =>
   categoryStyle(editingEntry.value ? selectedCategoryName.value : dialogCategory.value?.category || ''),
 )
+
+const budgetPercent = (item: ExpenseTotal) => {
+  if (!item.budget) return 0
+  return Math.min(100, (item.monthSpent / item.budget) * 100)
+}
+
+const budgetBarColor = (item: ExpenseTotal) => {
+  if (!item.budget) return 'var(--green-400)'
+  const ratio = item.monthSpent / item.budget
+  if (ratio >= 1) return '#b23a3a'
+  if (ratio >= 0.8) return 'var(--amber-200)'
+  return 'var(--green-400)'
+}
 
 const loadCategories = async () => {
   categories.value = await $fetch('/categories', { query: { userid } })
@@ -687,6 +713,31 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.budget-bar-wrap {
+  margin-top: 6px;
+}
+
+.budget-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.budget-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.budget-caption {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .expense-amount {
