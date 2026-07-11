@@ -1,12 +1,12 @@
-import { createCategory } from '../../utils/spendnest'
+import { updateCategoryBudget } from '../../utils/spendnest'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const userid = String(body?.userid ?? '').trim()
-  const category = String(body?.category ?? '').trim()
+  const catid = String(body?.catid ?? '').trim()
 
-  if (!userid || !category) {
-    throw createError({ statusCode: 400, statusMessage: 'userid and category are required' })
+  if (!userid || !catid) {
+    throw createError({ statusCode: 400, statusMessage: 'userid and catid are required' })
   }
 
   let budget: number | null = null
@@ -18,10 +18,10 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await createCategory(userid, category, budget)
+    return await updateCategoryBudget(userid, catid, budget)
   } catch (err: any) {
-    if (err.message === 'CATEGORY_EXISTS') {
-      throw createError({ statusCode: 409, statusMessage: 'Category already exists' })
+    if (err.message === 'CATEGORY_NOT_FOUND') {
+      throw createError({ statusCode: 404, statusMessage: 'Category not found' })
     }
     throw err
   }
