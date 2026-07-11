@@ -14,6 +14,7 @@ export interface CategoryRow {
   category: string
   createdon: string
   userid: string
+  budget: number | null
 }
 
 export interface ExpenseEntry {
@@ -70,30 +71,48 @@ export async function resetPassword(email: string, newPassword: string): Promise
   }
 }
 
+const withBudgetNumber = (row: any): CategoryRow => ({
+  ...row,
+  budget: row.budget === null ? null : Number(row.budget),
+})
+
 export async function getCategories(userid: string): Promise<CategoryRow[]> {
   const { rows } = await getPool().query(
-    `select catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid
+    `select catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid, budget
      from categories where userid = $1 order by createdon desc`,
     [userid],
   )
-  return rows
+  return rows.map(withBudgetNumber)
 }
 
-export async function createCategory(userid: string, category: string): Promise<CategoryRow> {
+export async function createCategory(userid: string, category: string, budget: number | null = null): Promise<CategoryRow> {
   try {
     const { rows } = await getPool().query(
-      `insert into categories (category, userid)
-       values ($1, $2)
-       returning catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid`,
-      [category, userid],
+      `insert into categories (category, userid, budget)
+       values ($1, $2, $3)
+       returning catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid, budget`,
+      [category, userid, budget],
     )
-    return rows[0]
+    return withBudgetNumber(rows[0])
   } catch (err: any) {
     if (err.code === '23505') {
       throw new Error('CATEGORY_EXISTS')
     }
     throw err
   }
+}
+
+export async function updateCategoryBudget(userid: string, catid: string, budget: number | null): Promise<CategoryRow> {
+  const { rows } = await getPool().query(
+    `update categories set budget = $1
+     where catid = $2 and userid = $3
+     returning catid, category, to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon, userid, budget`,
+    [budget, catid, userid],
+  )
+  if (!rows[0]) {
+    throw new Error('CATEGORY_NOT_FOUND')
+  }
+  return withBudgetNumber(rows[0])
 }
 
 export async function getExpenses(userid: string, from?: string, to?: string): Promise<ExpenseEntry[]> {
