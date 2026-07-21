@@ -15,6 +15,49 @@
         </div>
       </div>
 
+      <div class="view-toggle view-toggle-inset">
+        <button :class="['view-toggle-btn', { active: mainView === 'category' }]" @click="mainView = 'category'">
+          Category
+        </button>
+        <button :class="['view-toggle-btn', { active: mainView === 'expense' }]" @click="mainView = 'expense'">
+          Expense
+        </button>
+      </div>
+
+      <!-- Category view -->
+      <template v-if="mainView === 'category'">
+        <div class="cat-form">
+          <input v-model="newCategory" type="text" class="cat-input" placeholder="Name" @keyup.enter="onAddCategory">
+          <input v-model="newBudget" type="number" class="cat-input" placeholder="Monthly budget" @keyup.enter="onAddCategory">
+          <v-btn class="cat-add-btn" :loading="addingCategory" :disabled="addingCategory" @click="onAddCategory">
+            Add
+          </v-btn>
+        </div>
+
+        <v-alert v-if="errorMessage" type="error" density="compact" class="mx-4 mb-2" variant="tonal">
+          {{ errorMessage }}
+        </v-alert>
+
+        <div class="cat-list">
+          <div v-for="cat in categories" :key="cat.catid" class="cat-row">
+            <div class="cat-row-main">
+              <p class="cat-row-name">{{ cat.category }}</p>
+              <p class="cat-row-sub">Created on {{ formatDate(cat.createdon) }}</p>
+              <p class="cat-row-sub">
+                Budget: {{ cat.budget != null ? `${formatCurrency(cat.budget)}/month` : 'Not set' }}
+              </p>
+            </div>
+            <div class="cat-row-actions">
+              <v-btn icon="mdi-pencil-outline" variant="text" size="small" @click="openEditCategoryDialog(cat)" />
+              <v-btn icon="mdi-trash-can-outline" variant="text" size="small" color="error" @click="onDeleteCategory(cat)" />
+            </div>
+          </div>
+          <p v-if="!categories.length" class="empty-note">No categories yet. Add one above.</p>
+        </div>
+      </template>
+
+      <!-- Expense view -->
+      <template v-else>
       <div class="tabs">
         <button :class="['tab-btn', { active: tab === 'add' }]" @click="tab = 'add'">
           <i class="mdi mdi-plus" />Add
@@ -60,7 +103,7 @@
         <!-- Add Expense -->
         <template v-if="tab === 'add'">
           <p v-if="!categories.length" class="empty-note">
-            No categories yet. <NuxtLink to="/category">Add one first</NuxtLink>.
+            No categories yet. <a href="#" @click.prevent="mainView = 'category'">Add one first</a>.
           </p>
           <div v-else class="category-grid">
             <button
@@ -173,6 +216,7 @@
           <p v-else class="empty-note">No expenses recorded yet.</p>
         </template>
       </div>
+      </template>
     </div>
 
     <!-- Add / Edit expense popup -->
@@ -227,19 +271,82 @@
         </div>
       </div>
     </v-dialog>
+
+    <!-- Edit category popup -->
+    <v-dialog v-model="editCategoryDialogOpen" max-width="360">
+      <v-card class="pa-4 rounded-xl">
+        <v-card-title>Edit Category</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" density="compact" variant="tonal" class="mb-4">
+            If you edit or delete a category, all data associated with that category will also be updated or deleted.
+            Please be careful before performing this operation.
+          </v-alert>
+
+          <v-text-field
+            v-model="editCategoryName"
+            label="Category Name"
+            variant="outlined"
+            class="mb-2"
+            clearable
+          />
+          <v-text-field
+            v-model="editCategoryBudget"
+            label="Monthly Budget"
+            type="number"
+            variant="outlined"
+            hint="Leave blank to remove the budget"
+            persistent-hint
+            clearable
+            @keyup.enter="onSaveCategoryEdit"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="savingCategoryEdit" @click="editCategoryDialogOpen = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="savingCategoryEdit" :disabled="savingCategoryEdit" @click="onSaveCategoryEdit">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete category popup -->
+    <v-dialog v-model="deleteCategoryDialogOpen" max-width="360">
+      <v-card class="pa-4 rounded-xl">
+        <v-card-title>Delete Category</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" density="compact" variant="tonal" class="mb-4">
+            If you edit or delete a category, all data associated with that category will also be updated or deleted.
+            Please be careful before performing this operation.
+          </v-alert>
+          <p>
+            Delete <b>{{ deleteCategoryTarget?.category }}</b> and every expense recorded under it? This cannot be undone.
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="deletingCategory" @click="deleteCategoryDialogOpen = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deletingCategory" :disabled="deletingCategory" @click="onConfirmDeleteCategory">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <BottomNav active="none" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { formatDate } from '~/composables/useFormatDate'
+import { categoryStyle } from '~/composables/useCategoryStyle'
+
+definePageMeta({ layout: 'auth' })
 
 interface Category {
   catid: string
   category: string
   createdon: string
   userid: string
+  budget: number | null
 }
 
 interface ExpenseEntry {
@@ -266,7 +373,11 @@ interface DateGroup {
 }
 
 const router = useRouter()
-const tab = ref('add')
+const route = useRoute()
+const VALID_TABS = ['add', 'total', 'byDate']
+const queryTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+const mainView = ref<'category' | 'expense'>(queryTab === 'category' ? 'category' : 'expense')
+const tab = ref(VALID_TABS.includes(queryTab) ? queryTab : 'add')
 const categories = ref<Category[]>([])
 const entries = ref<ExpenseEntry[]>([])
 const totals = ref<ExpenseTotal[]>([])
@@ -285,6 +396,20 @@ const deletingExpenseId = ref<string | null>(null)
 const dateFrom = ref('')
 const dateTo = ref('')
 const dateViewMode = ref<'view' | 'edit'>('view')
+
+const newCategory = ref('')
+const newBudget = ref('')
+const addingCategory = ref(false)
+
+const editCategoryDialogOpen = ref(false)
+const editCategoryTarget = ref<Category | null>(null)
+const editCategoryName = ref('')
+const editCategoryBudget = ref('')
+const savingCategoryEdit = ref(false)
+
+const deleteCategoryDialogOpen = ref(false)
+const deleteCategoryTarget = ref<Category | null>(null)
+const deletingCategory = ref(false)
 
 let userid = ''
 
@@ -307,36 +432,6 @@ const entriesByDate = computed<DateGroup[]>(() => {
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
 const formatCurrency = (value: number) => `₹${value.toFixed(2)}`
-
-interface CategoryStyle {
-  icon: string
-  bg: string
-  color: string
-}
-
-const CATEGORY_ICON_MAP: Array<{ match: RegExp } & CategoryStyle> = [
-  { match: /veg/i, icon: 'mdi-carrot', bg: 'var(--green-50)', color: 'var(--green-800)' },
-  { match: /fruit/i, icon: 'mdi-food-apple-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
-  { match: /grocer/i, icon: 'mdi-cart-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
-  { match: /milk|dairy/i, icon: 'mdi-cup-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
-  { match: /transport|fuel|petrol|gas|car/i, icon: 'mdi-gas-station-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
-  { match: /rent|house|home/i, icon: 'mdi-home-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
-  { match: /health|medic|pharma/i, icon: 'mdi-medical-bag', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
-  { match: /entertain|movie|game/i, icon: 'mdi-movie-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
-  { match: /outside|restaurant|food|eat/i, icon: 'mdi-silverware-fork-knife', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
-]
-
-const FALLBACK_PALETTE: CategoryStyle[] = [
-  { icon: 'mdi-wallet-outline', bg: 'var(--green-50)', color: 'var(--green-800)' },
-  { icon: 'mdi-wallet-outline', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
-]
-
-const categoryStyle = (name: string): CategoryStyle => {
-  const found = CATEGORY_ICON_MAP.find(m => m.match.test(name))
-  if (found) return found
-  const idx = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % FALLBACK_PALETTE.length
-  return FALLBACK_PALETTE[idx]
-}
 
 const activeCategory = computed<Category | null>(() => {
   if (editingEntry.value) {
@@ -362,6 +457,84 @@ const budgetBarColor = (item: ExpenseTotal) => {
 
 const loadCategories = async () => {
   categories.value = await $fetch('/categories', { query: { userid } })
+}
+
+const onAddCategory = async () => {
+  errorMessage.value = ''
+  const category = newCategory.value.trim()
+  if (!category) return
+
+  addingCategory.value = true
+  try {
+    await $fetch('/categories', {
+      method: 'POST',
+      body: { userid, category, budget: newBudget.value || null },
+    })
+    newCategory.value = ''
+    newBudget.value = ''
+    await loadCategories()
+  } catch (err: any) {
+    errorMessage.value = err?.data?.statusMessage || 'Failed to add category'
+  } finally {
+    addingCategory.value = false
+  }
+}
+
+const openEditCategoryDialog = (cat: Category) => {
+  editCategoryTarget.value = cat
+  editCategoryName.value = cat.category
+  editCategoryBudget.value = cat.budget != null ? String(cat.budget) : ''
+  errorMessage.value = ''
+  editCategoryDialogOpen.value = true
+}
+
+const onSaveCategoryEdit = async () => {
+  if (!editCategoryTarget.value) return
+
+  errorMessage.value = ''
+  savingCategoryEdit.value = true
+  try {
+    await $fetch('/categories', {
+      method: 'PUT',
+      body: {
+        userid,
+        catid: editCategoryTarget.value.catid,
+        category: editCategoryName.value.trim(),
+        budget: editCategoryBudget.value || null,
+      },
+    })
+    editCategoryDialogOpen.value = false
+    await Promise.all([loadCategories(), loadExpenses()])
+  } catch (err: any) {
+    errorMessage.value = err?.data?.statusMessage || 'Failed to update category'
+  } finally {
+    savingCategoryEdit.value = false
+  }
+}
+
+const onDeleteCategory = (cat: Category) => {
+  deleteCategoryTarget.value = cat
+  errorMessage.value = ''
+  deleteCategoryDialogOpen.value = true
+}
+
+const onConfirmDeleteCategory = async () => {
+  if (!deleteCategoryTarget.value) return
+
+  errorMessage.value = ''
+  deletingCategory.value = true
+  try {
+    await $fetch('/categories', {
+      method: 'DELETE',
+      query: { userid, catid: deleteCategoryTarget.value.catid },
+    })
+    deleteCategoryDialogOpen.value = false
+    await Promise.all([loadCategories(), loadExpenses()])
+  } catch (err: any) {
+    errorMessage.value = err?.data?.statusMessage || 'Failed to delete category'
+  } finally {
+    deletingCategory.value = false
+  }
 }
 
 const loadExpenses = async () => {
@@ -484,11 +657,42 @@ onMounted(async () => {
 
 <style scoped>
 .page-wrap {
-  min-height: 100%;
+  min-height: 100vh;
   display: flex;
-  justify-content: center;
-  padding: 24px 12px;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 12px 84px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.view-toggle {
+  display: flex;
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin: 16px 16px 0;
+}
+
+.view-toggle-inset {
+  margin: 16px 14px 0;
+}
+
+.view-toggle-btn {
+  flex: 1;
+  border: none;
+  background: #fff;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 14px 0;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.view-toggle-btn.active {
+  background: var(--green-600);
+  color: #fff;
 }
 
 .phone {
@@ -499,6 +703,89 @@ onMounted(async () => {
   border: 1px solid var(--border);
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.cat-panel-header {
+  padding: 22px 20px 6px;
+  text-align: center;
+}
+
+.cat-panel-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cat-form {
+  display: flex;
+  gap: 8px;
+  padding: 16px 20px 4px;
+}
+
+.cat-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  background: var(--cream);
+}
+
+.cat-input:focus {
+  border-color: var(--green-600);
+}
+
+.cat-add-btn {
+  flex-shrink: 0;
+  background: var(--green-600) !important;
+  color: #fff !important;
+  font-weight: 600;
+  border-radius: var(--radius) !important;
+}
+
+.cat-list {
+  padding: 12px 20px 20px;
+}
+
+.cat-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.cat-list .cat-row:first-child {
+  border-top: none;
+}
+
+.cat-row-main {
+  min-width: 0;
+}
+
+.cat-row-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cat-row-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cat-row-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .header {
@@ -1018,26 +1305,5 @@ onMounted(async () => {
   background: var(--green-600);
   color: #fff;
   box-shadow: 0 8px 16px rgba(15, 110, 86, 0.25);
-}
-</style>
-
-<style>
-:root {
-  --green-900: #04342c;
-  --green-800: #085041;
-  --green-600: #0f6e56;
-  --green-400: #1d9e75;
-  --green-200: #9fe1cb;
-  --green-100: #c0dd97;
-  --green-50: #e1f5ee;
-  --amber-50: #faeeda;
-  --amber-200: #ef9f27;
-  --amber-800: #633806;
-  --cream: #f7f4ee;
-  --text-primary: #2c2c2a;
-  --text-secondary: #5f5e5a;
-  --text-muted: #888780;
-  --border: #e5e2d9;
-  --radius: 10px;
 }
 </style>

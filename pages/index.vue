@@ -40,7 +40,7 @@ const router = useRouter()
 onMounted(() => {
   const userid = localStorage.getItem('spendnest_userid')
   if (userid) {
-    router.push('/expense')
+    router.push('/home')
   }
 })
 
