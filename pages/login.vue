@@ -114,7 +114,7 @@ const onLogin = async () => {
     localStorage.setItem('spendnest_userid', user.userid)
     localStorage.setItem('spendnest_username', user.name)
 
-    router.push('/')
+    router.push('/home')
   } catch (err: any) {
     errorMessage.value = err?.data?.statusMessage || 'Invalid email or password'
   }
