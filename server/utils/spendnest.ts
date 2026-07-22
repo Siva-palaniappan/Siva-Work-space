@@ -26,6 +26,16 @@ export interface ExpenseEntry {
   dateofexpense: string
 }
 
+export interface TodoRow {
+  todoid: string
+  userid: string
+  title: string
+  notes: string
+  duedate: string | null
+  completed: boolean
+  createdon: string
+}
+
 export function hashPassword(plain: string) {
   const salt = randomBytes(16).toString('hex')
   const hash = scryptSync(plain, salt, 64).toString('hex')
@@ -241,4 +251,81 @@ export function aggregateExpensesByCategory(rows: ExpenseEntry[]): Record<string
     totals[row.category] = (totals[row.category] || 0) + row.amount
   }
   return totals
+}
+
+const TODO_COLUMNS = `todoid, userid, title, coalesce(notes, '') as notes,
+       to_char(duedate, 'YYYY-MM-DD') as duedate, completed,
+       to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon`
+
+export async function getTodos(userid: string): Promise<TodoRow[]> {
+  const { rows } = await getPool().query(
+    `select ${TODO_COLUMNS}
+     from todos where userid = $1
+     order by completed asc, duedate asc nulls last, createdon desc`,
+    [userid],
+  )
+  return rows
+}
+
+export async function createTodo(
+  userid: string,
+  title: string,
+  notes: string | null,
+  duedate: string | null,
+): Promise<TodoRow> {
+  const { rows } = await getPool().query(
+    `insert into todos (userid, title, notes, duedate)
+     values ($1, $2, $3, $4)
+     returning ${TODO_COLUMNS}`,
+    [userid, title, notes || null, duedate || null],
+  )
+  return rows[0]
+}
+
+export async function updateTodo(
+  userid: string,
+  todoid: string,
+  changes: { title?: string; notes?: string | null; duedate?: string | null; completed?: boolean },
+): Promise<TodoRow> {
+  const sets: string[] = []
+  const params: any[] = []
+
+  if (changes.title !== undefined) {
+    params.push(changes.title)
+    sets.push(`title = $${params.length}`)
+  }
+  if ('notes' in changes) {
+    params.push(changes.notes || null)
+    sets.push(`notes = $${params.length}`)
+  }
+  if ('duedate' in changes) {
+    params.push(changes.duedate || null)
+    sets.push(`duedate = $${params.length}`)
+  }
+  if (changes.completed !== undefined) {
+    params.push(changes.completed)
+    sets.push(`completed = $${params.length}`)
+  }
+  if (!sets.length) {
+    throw new Error('NOTHING_TO_UPDATE')
+  }
+
+  params.push(todoid, userid)
+  const { rows } = await getPool().query(
+    `update todos set ${sets.join(', ')}
+     where todoid = $${params.length - 1} and userid = $${params.length}
+     returning ${TODO_COLUMNS}`,
+    params,
+  )
+  if (!rows[0]) {
+    throw new Error('TODO_NOT_FOUND')
+  }
+  return rows[0]
+}
+
+export async function deleteTodo(userid: string, todoid: string): Promise<void> {
+  const { rowCount } = await getPool().query('delete from todos where todoid = $1 and userid = $2', [todoid, userid])
+  if (rowCount === 0) {
+    throw new Error('TODO_NOT_FOUND')
+  }
 }
