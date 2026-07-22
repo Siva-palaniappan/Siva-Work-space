@@ -52,11 +52,11 @@
             <span class="quick-label">Expenses</span>
             <span class="quick-sub">Add &amp; manage</span>
           </NuxtLink>
-          <button class="quick-card" @click="onComingSoon('To-Do')">
+          <NuxtLink to="/todo" class="quick-card">
             <span class="quick-icon"><i class="mdi mdi-clipboard-check-outline" /></span>
             <span class="quick-label">To-Do</span>
             <span class="quick-sub">Tasks &amp; todos</span>
-          </button>
+          </NuxtLink>
         </div>
       </section>
 
@@ -138,8 +138,6 @@ const recentEntries = computed(() => entries.value.slice(0, 3))
 const initials = computed(() => username.value.trim().charAt(0).toUpperCase() || '?')
 
 const formatCurrency = (value: number) => `₹${value.toFixed(2)}`
-
-const onComingSoon = (label: string) => alert(`${label} is coming soon.`)
 
 const onSignOut = () => {
   localStorage.removeItem('spendnest_userid')
