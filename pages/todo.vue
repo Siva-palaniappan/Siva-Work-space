@@ -45,15 +45,18 @@
             class="todo-row"
             :style="{ borderLeftColor: STATUS_META[item.status].color }"
           >
-            <select
-              class="status-select"
-              :style="{ background: STATUS_META[item.status].bg, color: STATUS_META[item.status].color }"
-              :value="item.status"
-              :disabled="updatingId === item.todoid"
-              @change="onStatusChange(item, $event.target.value)"
-            >
-              <option v-for="s in STATUS_LIST" :key="s" :value="s">{{ STATUS_META[s].label }}</option>
-            </select>
+            <div class="status-select-wrap">
+              <select
+                class="status-select"
+                :style="{ background: STATUS_META[item.status].bg, color: STATUS_META[item.status].color }"
+                :value="item.status"
+                :disabled="updatingId === item.todoid"
+                @change="onStatusChange(item, $event.target.value)"
+              >
+                <option v-for="s in STATUS_LIST" :key="s" :value="s">{{ STATUS_META[s].label }}</option>
+              </select>
+              <i class="mdi mdi-chevron-down status-chevron" :style="{ color: STATUS_META[item.status].color }" />
+            </div>
 
             <div class="todo-info">
               <p class="todo-title" :class="{ done: item.status === 'COMPLETED' }">{{ item.title }}</p>
@@ -420,12 +423,16 @@ onMounted(async () => {
   background: var(--cream);
 }
 
-.status-select {
+.status-select-wrap {
+  position: relative;
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.status-select {
   border: none;
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 5px 24px 5px 12px;
   font-size: 11px;
   font-weight: 600;
   font-family: inherit;
@@ -434,11 +441,37 @@ onMounted(async () => {
   appearance: none;
   -webkit-appearance: none;
   text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.status-select:hover:not(:disabled) {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+  transform: translateY(-1px);
+}
+
+.status-select:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor;
 }
 
 .status-select:disabled {
   opacity: 0.6;
   cursor: default;
+  transform: none;
+}
+
+.status-chevron {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+
+.status-select-wrap:focus-within .status-chevron {
+  transform: translateY(-50%) rotate(180deg);
 }
 
 .todo-info {
