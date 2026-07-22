@@ -10,16 +10,23 @@
           <div class="icon-badge"><i class="mdi mdi-clipboard-check-outline" /></div>
         </div>
         <div class="header-total">
-          <p>Pending tasks</p>
-          <p>{{ pendingCount }}</p>
+          <p>Open tasks</p>
+          <p>{{ openCount }}</p>
         </div>
       </div>
 
       <div class="filter-row">
-        <div class="segmented">
-          <button :class="{ active: filter === 'pending' }" @click="filter = 'pending'">Pending</button>
-          <button :class="{ active: filter === 'completed' }" @click="filter = 'completed'">Completed</button>
+        <div class="segmented status-filter">
           <button :class="{ active: filter === 'all' }" @click="filter = 'all'">All</button>
+          <button
+            v-for="s in STATUS_LIST"
+            :key="s"
+            :class="{ active: filter === s }"
+            :style="filter === s ? { background: STATUS_META[s].bg, color: STATUS_META[s].color } : {}"
+            @click="filter = s"
+          >
+            {{ STATUS_META[s].label }}
+          </button>
         </div>
         <button class="add-btn" @click="openAddDialog">
           <i class="mdi mdi-plus" />Add Task
@@ -32,19 +39,24 @@
 
       <div class="list">
         <div v-if="filteredTodos.length">
-          <div v-for="item in filteredTodos" :key="item.todoid" class="todo-row">
-            <button
-              class="todo-check"
-              :class="{ checked: item.completed }"
-              :disabled="togglingId === item.todoid"
-              aria-label="Toggle complete"
-              @click="onToggleComplete(item)"
+          <div
+            v-for="item in filteredTodos"
+            :key="item.todoid"
+            class="todo-row"
+            :style="{ borderLeftColor: STATUS_META[item.status].color }"
+          >
+            <select
+              class="status-select"
+              :style="{ background: STATUS_META[item.status].bg, color: STATUS_META[item.status].color }"
+              :value="item.status"
+              :disabled="updatingId === item.todoid"
+              @change="onStatusChange(item, $event.target.value)"
             >
-              <i v-if="item.completed" class="mdi mdi-check" />
-            </button>
+              <option v-for="s in STATUS_LIST" :key="s" :value="s">{{ STATUS_META[s].label }}</option>
+            </select>
 
             <div class="todo-info">
-              <p class="todo-title" :class="{ done: item.completed }">{{ item.title }}</p>
+              <p class="todo-title" :class="{ done: item.status === 'COMPLETED' }">{{ item.title }}</p>
               <p v-if="item.notes" class="todo-notes">{{ item.notes }}</p>
               <span v-if="item.duedate" class="todo-due">
                 <i class="mdi mdi-calendar-blank" />{{ formatDate(item.duedate) }}
@@ -75,7 +87,7 @@
           </div>
         </div>
         <p v-else class="empty-note">
-          {{ filter === 'completed' ? 'No completed tasks yet.' : filter === 'pending' ? 'No pending tasks. Add one above.' : 'No tasks yet. Add one above.' }}
+          {{ filter === 'all' ? 'No tasks yet. Add one above.' : `No ${STATUS_META[filter].label.toLowerCase()} tasks.` }}
         </p>
       </div>
     </div>
@@ -116,19 +128,29 @@ import { formatDate } from '~/composables/useFormatDate'
 
 definePageMeta({ layout: 'auth' })
 
+type TodoStatus = 'NEW' | 'HOLD' | 'INPROGRESS' | 'COMPLETED'
+
 interface TodoItem {
   todoid: string
   userid: string
   title: string
   notes: string
   duedate: string | null
-  completed: boolean
+  status: TodoStatus
   createdon: string
+}
+
+const STATUS_LIST: TodoStatus[] = ['NEW', 'HOLD', 'INPROGRESS', 'COMPLETED']
+const STATUS_META: Record<TodoStatus, { label: string; bg: string; color: string }> = {
+  NEW: { label: 'New', bg: '#e7e3fa', color: '#5b3fa0' },
+  HOLD: { label: 'Hold', bg: 'var(--amber-50)', color: 'var(--amber-800)' },
+  INPROGRESS: { label: 'In Progress', bg: '#dcedfd', color: '#1d5fae' },
+  COMPLETED: { label: 'Completed', bg: 'var(--green-50)', color: 'var(--green-800)' },
 }
 
 const router = useRouter()
 const todos = ref<TodoItem[]>([])
-const filter = ref<'pending' | 'completed' | 'all'>('pending')
+const filter = ref<TodoStatus | 'all'>('all')
 const errorMessage = ref('')
 
 const dialogOpen = ref(false)
@@ -137,17 +159,16 @@ const title = ref('')
 const dueDate = ref('')
 const notes = ref('')
 const submitting = ref(false)
-const togglingId = ref<string | null>(null)
+const updatingId = ref<string | null>(null)
 const deletingId = ref<string | null>(null)
 
 let userid = ''
 
-const pendingCount = computed(() => todos.value.filter(t => !t.completed).length)
+const openCount = computed(() => todos.value.filter(t => t.status !== 'COMPLETED').length)
 
 const filteredTodos = computed(() => {
-  if (filter.value === 'pending') return todos.value.filter(t => !t.completed)
-  if (filter.value === 'completed') return todos.value.filter(t => t.completed)
-  return todos.value
+  if (filter.value === 'all') return todos.value
+  return todos.value.filter(t => t.status === filter.value)
 })
 
 const loadTodos = async () => {
@@ -202,19 +223,19 @@ const onSubmitTodo = async () => {
   }
 }
 
-const onToggleComplete = async (item: TodoItem) => {
+const onStatusChange = async (item: TodoItem, status: string) => {
   errorMessage.value = ''
-  togglingId.value = item.todoid
+  updatingId.value = item.todoid
   try {
     await $fetch('/todos', {
       method: 'PUT',
-      body: { userid, todoid: item.todoid, completed: !item.completed },
+      body: { userid, todoid: item.todoid, status },
     })
     await loadTodos()
   } catch (err: any) {
     errorMessage.value = err?.data?.statusMessage || 'Failed to update task'
   } finally {
-    togglingId.value = null
+    updatingId.value = null
   }
 }
 
@@ -323,9 +344,9 @@ onMounted(async () => {
 
 .filter-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   padding: 14px 14px 0;
 }
 
@@ -335,6 +356,10 @@ onMounted(async () => {
   border-radius: var(--radius);
   padding: 3px;
   border: 1px solid var(--border);
+}
+
+.status-filter {
+  flex-wrap: wrap;
 }
 
 .segmented button {
@@ -356,6 +381,7 @@ onMounted(async () => {
 }
 
 .add-btn {
+  align-self: flex-end;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -386,33 +412,33 @@ onMounted(async () => {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
-}
-
-.list .todo-row:first-child {
+  padding: 12px 10px 12px 12px;
+  margin: 8px 0;
   border-top: none;
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  background: var(--cream);
 }
 
-.todo-check {
+.status-select {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  margin-top: 2px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 14px;
+  margin-top: 1px;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
 }
 
-.todo-check.checked {
-  background: var(--green-600);
-  border-color: var(--green-600);
+.status-select:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .todo-info {
