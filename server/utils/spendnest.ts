@@ -26,13 +26,15 @@ export interface ExpenseEntry {
   dateofexpense: string
 }
 
+export type TodoStatus = 'NEW' | 'HOLD' | 'INPROGRESS' | 'COMPLETED'
+
 export interface TodoRow {
   todoid: string
   userid: string
   title: string
   notes: string
   duedate: string | null
-  completed: boolean
+  status: TodoStatus
   createdon: string
 }
 
@@ -254,14 +256,14 @@ export function aggregateExpensesByCategory(rows: ExpenseEntry[]): Record<string
 }
 
 const TODO_COLUMNS = `todoid, userid, title, coalesce(notes, '') as notes,
-       to_char(duedate, 'YYYY-MM-DD') as duedate, completed,
+       to_char(duedate, 'YYYY-MM-DD') as duedate, status,
        to_char(createdon, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as createdon`
 
 export async function getTodos(userid: string): Promise<TodoRow[]> {
   const { rows } = await getPool().query(
     `select ${TODO_COLUMNS}
      from todos where userid = $1
-     order by completed asc, duedate asc nulls last, createdon desc`,
+     order by (status = 'COMPLETED') asc, duedate asc nulls last, createdon desc`,
     [userid],
   )
   return rows
@@ -285,7 +287,7 @@ export async function createTodo(
 export async function updateTodo(
   userid: string,
   todoid: string,
-  changes: { title?: string; notes?: string | null; duedate?: string | null; completed?: boolean },
+  changes: { title?: string; notes?: string | null; duedate?: string | null; status?: TodoStatus },
 ): Promise<TodoRow> {
   const sets: string[] = []
   const params: any[] = []
@@ -302,9 +304,9 @@ export async function updateTodo(
     params.push(changes.duedate || null)
     sets.push(`duedate = $${params.length}`)
   }
-  if (changes.completed !== undefined) {
-    params.push(changes.completed)
-    sets.push(`completed = $${params.length}`)
+  if (changes.status !== undefined) {
+    params.push(changes.status)
+    sets.push(`status = $${params.length}`)
   }
   if (!sets.length) {
     throw new Error('NOTHING_TO_UPDATE')
