@@ -4,7 +4,7 @@
       <div class="header">
         <div class="header-top">
           <div>
-            <p class="eyebrow">This month</p>
+            <p class="eyebrow">{{ isDefaultMonthRange ? 'This month' : 'Selected range' }}</p>
             <h1>Expenses</h1>
           </div>
           <div class="icon-badge"><i class="mdi mdi-feather" /></div>
@@ -74,6 +74,18 @@
         {{ errorMessage }}
       </v-alert>
 
+      <div v-if="tab === 'total' || tab === 'byDate'" class="date-filters month-row">
+        <label class="date-field month-field">
+          <i class="mdi mdi-calendar-month-outline" />
+          <select v-model="selectedMonth" aria-label="Select month" @change="onMonthSelect">
+            <option v-for="m in monthOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+          </select>
+        </label>
+        <button class="clear-btn" aria-label="Reset to this month" :disabled="isDefaultMonthRange" @click="clearDateFilter">
+          <i class="mdi mdi-close" />
+        </button>
+      </div>
+
       <div v-if="tab === 'total' || tab === 'byDate'" class="date-filters">
         <label class="date-field">
           <i class="mdi mdi-calendar-blank" />
@@ -83,8 +95,8 @@
           <i class="mdi mdi-calendar-blank" />
           <input v-model="dateTo" type="date" aria-label="To date">
         </label>
-        <button class="clear-btn" aria-label="Clear dates" :disabled="!dateFrom && !dateTo" @click="clearDateFilter">
-          <i class="mdi mdi-close" />
+        <button class="apply-btn" :disabled="!dateFrom || !dateTo" @click="applyDateFilter">
+          Apply
         </button>
       </div>
 
@@ -135,7 +147,7 @@
               </div>
               <div class="expense-info">
                 <p class="name">{{ item.category }}</p>
-                <div v-if="item.budget" class="budget-bar-wrap">
+                <div v-if="item.budget && isMonthAlignedRange" class="budget-bar-wrap">
                   <div class="budget-bar">
                     <div
                       class="budget-bar-fill"
@@ -209,7 +221,7 @@
             </template>
 
             <div class="total-bar">
-              <span>Total, all dates</span>
+              <span>{{ isDefaultMonthRange ? 'Total, this month' : 'Total, selected range' }}</span>
               <span>{{ formatCurrency(entriesTotal) }}</span>
             </div>
           </template>
@@ -334,7 +346,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatDate } from '~/composables/useFormatDate'
 import { categoryStyle } from '~/composables/useCategoryStyle'
@@ -393,8 +405,39 @@ const description = ref('')
 const submittingExpense = ref(false)
 const deletingExpenseId = ref<string | null>(null)
 
-const dateFrom = ref('')
-const dateTo = ref('')
+const pad = (n: number) => String(n).padStart(2, '0')
+const formatYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const monthValue = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
+const currentMonthRange = () => {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  return { start: formatYMD(start), end: formatYMD(end) }
+}
+const monthRangeFor = (value: string) => {
+  const [y, m] = value.split('-').map(Number)
+  const start = new Date(y, m - 1, 1)
+  const end = new Date(y, m, 0)
+  return { start: formatYMD(start), end: formatYMD(end) }
+}
+
+const monthOptions = computed(() => {
+  const now = new Date()
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    return {
+      value: monthValue(d),
+      label: i === 0 ? 'This month' : d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+    }
+  })
+})
+
+const { start: defaultFrom, end: defaultTo } = currentMonthRange()
+const dateFrom = ref(defaultFrom)
+const dateTo = ref(defaultTo)
+const appliedFrom = ref(defaultFrom)
+const appliedTo = ref(defaultTo)
+const selectedMonth = ref(monthValue(new Date()))
 const dateViewMode = ref<'view' | 'edit'>('view')
 
 const newCategory = ref('')
@@ -415,6 +458,18 @@ let userid = ''
 
 const entriesTotal = computed(() => entries.value.reduce((sum, e) => sum + e.amount, 0))
 const categoriesTotal = computed(() => totals.value.reduce((sum, t) => sum + t.amount, 0))
+const isDefaultMonthRange = computed(() => {
+  const { start, end } = currentMonthRange()
+  return appliedFrom.value === start && appliedTo.value === end
+})
+
+const isMonthAlignedRange = computed(() => {
+  if (!appliedFrom.value || !appliedTo.value) return false
+  const [y, m, d] = appliedFrom.value.split('-').map(Number)
+  if (d !== 1) return false
+  const { start, end } = monthRangeFor(`${y}-${pad(m)}`)
+  return appliedFrom.value === start && appliedTo.value === end
+})
 
 const entriesByDate = computed<DateGroup[]>(() => {
   const groups = new Map<string, ExpenseEntry[]>()
@@ -538,29 +593,39 @@ const onConfirmDeleteCategory = async () => {
 }
 
 const loadExpenses = async () => {
-  const query: Record<string, string> = { userid }
-  if (dateFrom.value) query.from = dateFrom.value
-  if (dateTo.value) query.to = dateTo.value
+  const query: Record<string, string> = { userid, from: appliedFrom.value, to: appliedTo.value }
 
   const data = await $fetch('/expenses', { query })
   entries.value = data.entries
   totals.value = data.totals
 }
 
-const clearDateFilter = () => {
-  dateFrom.value = ''
-  dateTo.value = ''
-}
-
-watch([dateFrom, dateTo], () => {
+const applyDateFilter = () => {
   if (!userid) return
   if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
     errorMessage.value = '"From" date must be before "To" date.'
     return
   }
   errorMessage.value = ''
+  appliedFrom.value = dateFrom.value
+  appliedTo.value = dateTo.value
   loadExpenses()
-})
+}
+
+const onMonthSelect = () => {
+  const { start, end } = monthRangeFor(selectedMonth.value)
+  dateFrom.value = start
+  dateTo.value = end
+  applyDateFilter()
+}
+
+const clearDateFilter = () => {
+  const { start, end } = currentMonthRange()
+  dateFrom.value = start
+  dateTo.value = end
+  selectedMonth.value = monthValue(new Date())
+  applyDateFilter()
+}
 
 const openAddDialog = (cat: Category) => {
   editingEntry.value = null
@@ -883,6 +948,43 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 14px 14px 0;
+}
+
+.month-row {
+  padding-top: 14px;
+}
+
+.month-field {
+  flex: 1;
+}
+
+.month-field select {
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-primary);
+  width: 100%;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.apply-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--green-600);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.apply-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .date-field {
