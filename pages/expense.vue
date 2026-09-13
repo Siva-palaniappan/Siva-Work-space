@@ -138,7 +138,7 @@
         <!-- View Total -->
         <template v-else-if="tab === 'total'">
           <div v-if="totals.length">
-            <div v-for="item in totals" :key="item.catid" class="expense-row">
+            <div v-for="item in sortedTotals" :key="item.catid" class="expense-row">
               <div
                 class="cat-icon"
                 :style="{ background: categoryStyle(item.category).bg, color: categoryStyle(item.category).color }"
@@ -458,6 +458,10 @@ let userid = ''
 
 const entriesTotal = computed(() => entries.value.reduce((sum, e) => sum + e.amount, 0))
 const categoriesTotal = computed(() => totals.value.reduce((sum, t) => sum + t.amount, 0))
+
+const sortedTotals = computed(() =>
+  [...totals.value].sort((a, b) => (b.budget ? 1 : 0) - (a.budget ? 1 : 0))
+)
 const isDefaultMonthRange = computed(() => {
   const { start, end } = currentMonthRange()
   return appliedFrom.value === start && appliedTo.value === end
