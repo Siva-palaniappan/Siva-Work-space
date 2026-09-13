@@ -59,13 +59,13 @@
       <!-- Expense view -->
       <template v-else>
       <div class="tabs">
-        <button :class="['tab-btn', { active: tab === 'add' }]" @click="tab = 'add'">
+        <button :class="['tab-btn', { active: tab === 'add' }]" @click="switchTab('add')">
           <i class="mdi mdi-plus" />Add
         </button>
-        <button :class="['tab-btn', { active: tab === 'total' }]" @click="tab = 'total'">
+        <button :class="['tab-btn', { active: tab === 'total' }]" @click="switchTab('total')">
           <i class="mdi mdi-chart-donut" />Total
         </button>
-        <button :class="['tab-btn', 'date-tab', { active: tab === 'byDate' }]" @click="tab = 'byDate'">
+        <button :class="['tab-btn', 'date-tab', { active: tab === 'byDate' }]" @click="switchTab('byDate')">
           <i class="mdi mdi-calendar-month" />By date
         </button>
       </div>
@@ -137,37 +137,75 @@
 
         <!-- View Total -->
         <template v-else-if="tab === 'total'">
-          <div v-if="totals.length">
-            <div v-for="item in sortedTotals" :key="item.catid" class="expense-row">
-              <div
-                class="cat-icon"
-                :style="{ background: categoryStyle(item.category).bg, color: categoryStyle(item.category).color }"
-              >
-                <i :class="'mdi ' + categoryStyle(item.category).icon" />
-              </div>
-              <div class="expense-info">
-                <p class="name">{{ item.category }}</p>
-                <div v-if="item.budget && isMonthAlignedRange" class="budget-bar-wrap">
-                  <div class="budget-bar">
-                    <div
-                      class="budget-bar-fill"
-                      :style="{ width: budgetPercent(item) + '%', background: budgetBarColor(item) }"
-                    />
-                  </div>
-                  <span class="budget-caption">
-                    {{ formatCurrency(item.monthSpent) }} / {{ formatCurrency(item.budget) }} this month
-                  </span>
-                </div>
-              </div>
-              <div class="expense-amount">{{ formatCurrency(item.amount) }}</div>
+          <template v-if="selectedTotalCatId">
+            <div class="cat-detail-header">
+              <button class="back-btn" @click="selectedTotalCatId = null">
+                <i class="mdi mdi-arrow-left" />Back
+              </button>
+              <span class="cat-detail-title">{{ selectedTotalCategory?.category }}</span>
             </div>
-          </div>
-          <p v-else class="empty-note">No categories yet.</p>
 
-          <div v-if="totals.length" class="total-bar">
-            <span>Total</span>
-            <span>{{ formatCurrency(categoriesTotal) }}</span>
-          </div>
+            <template v-if="categoryEntries.length">
+              <div v-for="item in categoryEntries" :key="item.expenseid" class="expense-row">
+                <div
+                  class="cat-icon"
+                  :style="{ background: categoryStyle(item.category).bg, color: categoryStyle(item.category).color }"
+                >
+                  <i :class="'mdi ' + categoryStyle(item.category).icon" />
+                </div>
+                <div class="expense-info">
+                  <p class="name">{{ formatDate(item.dateofexpense) }}</p>
+                  <p v-if="item.description" class="note">{{ item.description }}</p>
+                </div>
+                <div class="expense-amount">{{ formatCurrency(item.amount) }}</div>
+              </div>
+
+              <div class="total-bar">
+                <span>{{ isDefaultMonthRange ? 'Total, this month' : 'Total, selected range' }}</span>
+                <span>{{ formatCurrency(categoryEntriesTotal) }}</span>
+              </div>
+            </template>
+            <p v-else class="empty-note">No expenses recorded for this category.</p>
+          </template>
+
+          <template v-else>
+            <div v-if="totals.length">
+              <div
+                v-for="item in sortedTotals"
+                :key="item.catid"
+                class="expense-row expense-row-clickable"
+                @click="selectedTotalCatId = item.catid"
+              >
+                <div
+                  class="cat-icon"
+                  :style="{ background: categoryStyle(item.category).bg, color: categoryStyle(item.category).color }"
+                >
+                  <i :class="'mdi ' + categoryStyle(item.category).icon" />
+                </div>
+                <div class="expense-info">
+                  <p class="name">{{ item.category }}</p>
+                  <div v-if="item.budget && isMonthAlignedRange" class="budget-bar-wrap">
+                    <div class="budget-bar">
+                      <div
+                        class="budget-bar-fill"
+                        :style="{ width: budgetPercent(item) + '%', background: budgetBarColor(item) }"
+                      />
+                    </div>
+                    <span class="budget-caption">
+                      {{ formatCurrency(item.monthSpent) }} / {{ formatCurrency(item.budget) }} this month
+                    </span>
+                  </div>
+                </div>
+                <div class="expense-amount">{{ formatCurrency(item.amount) }}</div>
+              </div>
+            </div>
+            <p v-else class="empty-note">No categories yet.</p>
+
+            <div v-if="totals.length" class="total-bar">
+              <span>Total</span>
+              <span>{{ formatCurrency(categoriesTotal) }}</span>
+            </div>
+          </template>
         </template>
 
         <!-- View by Date -->
@@ -395,6 +433,8 @@ const entries = ref<ExpenseEntry[]>([])
 const totals = ref<ExpenseTotal[]>([])
 const errorMessage = ref('')
 
+const selectedTotalCatId = ref<string | null>(null)
+
 const dialogOpen = ref(false)
 const dialogCategory = ref<Category | null>(null)
 const editingEntry = ref<ExpenseEntry | null>(null)
@@ -462,6 +502,14 @@ const categoriesTotal = computed(() => totals.value.reduce((sum, t) => sum + t.a
 const sortedTotals = computed(() =>
   [...totals.value].sort((a, b) => (b.budget ? 1 : 0) - (a.budget ? 1 : 0))
 )
+
+const selectedTotalCategory = computed(() =>
+  totals.value.find(t => t.catid === selectedTotalCatId.value) || null
+)
+const categoryEntries = computed(() =>
+  entries.value.filter(e => e.catid === selectedTotalCatId.value)
+)
+const categoryEntriesTotal = computed(() => categoryEntries.value.reduce((sum, e) => sum + e.amount, 0))
 const isDefaultMonthRange = computed(() => {
   const { start, end } = currentMonthRange()
   return appliedFrom.value === start && appliedTo.value === end
@@ -629,6 +677,11 @@ const clearDateFilter = () => {
   dateTo.value = end
   selectedMonth.value = monthValue(new Date())
   applyDateFilter()
+}
+
+const switchTab = (value: string) => {
+  tab.value = value
+  selectedTotalCatId.value = null
 }
 
 const openAddDialog = (cat: Category) => {
@@ -1106,6 +1159,40 @@ onMounted(async () => {
   gap: 12px;
   padding: 10px 0;
   border-top: 1px solid var(--border);
+}
+
+.expense-row-clickable {
+  cursor: pointer;
+}
+
+.expense-row-clickable:hover {
+  background: var(--green-50);
+}
+
+.cat-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 10px;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--green-800);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.cat-detail-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .date-divider + .expense-row {
